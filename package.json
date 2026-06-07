@@ -1,0 +1,19 @@
+{
+  "name": "openshield",
+  "version": "0.1.0",
+  "description": "Security middleware for AI Agent - Capture LLM responses for safety analysis",
+  "scripts": {},
+  "keywords": [
+    "opencode",
+    "ai",
+    "security",
+    "llm",
+    "agent",
+    "middleware"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
