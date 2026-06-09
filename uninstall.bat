@@ -8,9 +8,9 @@ echo.
 
 set "PLUGIN_DIR=%USERPROFILE%\.config\opencode\plugins"
 set "DATA_DIR=%USERPROFILE%\.openshield"
-set "PLUGIN_FILE=%PLUGIN_DIR%\openshield-capture.ts"
+set "PLUGIN_FILE=%PLUGIN_DIR%\open_shield.ts"
 
-echo [1/2] Removing plugin...
+echo [1/3] Removing plugin...
 if exist "%PLUGIN_FILE%" (
     del /f /q "%PLUGIN_FILE%"
     echo       Removed: %PLUGIN_FILE%
@@ -18,7 +18,15 @@ if exist "%PLUGIN_FILE%" (
     echo       Plugin not found, skipping.
 )
 
-echo [2/2] Cleaning up data directory...
+echo [2/3] Removing plugin config...
+if exist "%DATA_DIR%\config.json" (
+    del /f /q "%DATA_DIR%\config.json"
+    echo       Removed: %DATA_DIR%\config.json
+) else (
+    echo       Config not found, skipping.
+)
+
+echo [3/3] Cleaning up data directory...
 echo.
 set /p "DELETE_DATA=Do you want to delete captured data? (y/N): "
 if /i "%DELETE_DATA%"=="y" (

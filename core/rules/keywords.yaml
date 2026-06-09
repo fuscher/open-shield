@@ -1,0 +1,20 @@
+keyword_rules:
+  - category: database
+    keywords: ["delete", "drop", "truncate", "删除", "清空"]
+    severity: high
+    description: "数据库危险操作"
+
+  - category: financial
+    keywords: ["转账", "汇款", "payment", "transfer"]
+    severity: critical
+    description: "财务操作"
+
+  - category: system
+    keywords: ["rm -rf", "format", "reboot", "shutdown", "重启", "关机"]
+    severity: critical
+    description: "系统危险操作"
+
+  - category: network
+    keywords: ["curl", "wget", "fetch"]
+    severity: low
+    description: "网络请求"

@@ -7,9 +7,9 @@ echo ""
 
 PLUGIN_DIR="$HOME/.config/opencode/plugins"
 DATA_DIR="$HOME/.openshield"
-PLUGIN_FILE="$PLUGIN_DIR/openshield-capture.ts"
+PLUGIN_FILE="$PLUGIN_DIR/open_shield.ts"
 
-echo "[1/2] Removing plugin..."
+echo "[1/3] Removing plugin..."
 if [ -f "$PLUGIN_FILE" ]; then
     rm -f "$PLUGIN_FILE"
     echo "      Removed: $PLUGIN_FILE"
@@ -17,7 +17,15 @@ else
     echo "      Plugin not found, skipping."
 fi
 
-echo "[2/2] Cleaning up data directory..."
+echo "[2/3] Removing plugin config..."
+if [ -f "$DATA_DIR/config.json" ]; then
+    rm -f "$DATA_DIR/config.json"
+    echo "      Removed: $DATA_DIR/config.json"
+else
+    echo "      Config not found, skipping."
+fi
+
+echo "[3/3] Cleaning up data directory..."
 echo ""
 read -p "Do you want to delete captured data? (y/N): " DELETE_DATA
 if [ "$DELETE_DATA" = "y" ] || [ "$DELETE_DATA" = "Y" ]; then

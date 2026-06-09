@@ -5,46 +5,70 @@ echo "   OpenShield - Installation Script"
 echo "========================================"
 echo ""
 
-PLUGIN_DIR="$HOME/.config/opencode/plugins"
-DATA_DIR="$HOME/.openshield/captures"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_SRC="$SCRIPT_DIR/src/plugin/openshield-capture.ts"
+PLUGIN_DIR="$HOME/.config/opencode/plugins"
+SKILL_DIR="$HOME/.config/opencode/skills/openShield-safety"
+RULES_DIR="$HOME/.openshield/rules"
+LOGS_DIR="$HOME/.openshield/logs"
+DATA_DIR="$HOME/.openshield/captures"
+PLUGIN_SRC="$SCRIPT_DIR/src/plugin/open_shield.ts"
+RULES_SRC="$SCRIPT_DIR/core/rules"
 
-echo "[1/3] Checking OpenCode config directory..."
-if [ ! -d "$PLUGIN_DIR" ]; then
-    mkdir -p "$PLUGIN_DIR"
-    echo "      Created: $PLUGIN_DIR"
+echo "[1/5] Installing Python dependencies..."
+cd "$SCRIPT_DIR"
+pip install -r core/requirements.txt -q
+if [ $? -ne 0 ]; then
+    echo "      WARNING: pip install failed. Install manually:"
+    echo "      pip install -r core/requirements.txt"
 else
-    echo "      Found: $PLUGIN_DIR"
+    echo "      Dependencies installed."
 fi
 
-echo "[2/3] Installing plugin..."
+echo "[2/5] Copying detection rules..."
+mkdir -p "$RULES_DIR/custom"
+if [ -f "$RULES_SRC/pii.yaml" ]; then
+    cp "$RULES_SRC/pii.yaml" "$RULES_DIR/"
+    echo "      pii.yaml installed."
+fi
+if [ -f "$RULES_SRC/keywords.yaml" ]; then
+    cp "$RULES_SRC/keywords.yaml" "$RULES_DIR/"
+    echo "      keywords.yaml installed."
+fi
+
+echo "[3/5] Installing plugin..."
+mkdir -p "$PLUGIN_DIR"
 if [ -f "$PLUGIN_SRC" ]; then
-    cp "$PLUGIN_SRC" "$PLUGIN_DIR/openshield-capture.ts"
-    echo "      Plugin installed to: $PLUGIN_DIR/openshield-capture.ts"
+    cp "$PLUGIN_SRC" "$PLUGIN_DIR/open_shield.ts"
+    echo "      Plugin installed to: $PLUGIN_DIR/open_shield.ts"
 else
     echo "      ERROR: Plugin source not found at $PLUGIN_SRC"
-    echo "      Please run this script from the open-shield project directory."
     exit 1
 fi
 
-echo "[3/3] Creating data directory..."
-if [ ! -d "$DATA_DIR" ]; then
-    mkdir -p "$DATA_DIR"
-    echo "      Created: $DATA_DIR"
+echo "[4/5] Installing Skill..."
+mkdir -p "$SKILL_DIR"
+if [ -f "$SCRIPT_DIR/.opencode/skills/openShield-safety/SKILL.md" ]; then
+    cp "$SCRIPT_DIR/.opencode/skills/openShield-safety/SKILL.md" "$SKILL_DIR/"
+    echo "      Skill installed to: $SKILL_DIR"
 else
-    echo "      Found: $DATA_DIR"
+    echo "      Skill file not found, skipping (will be added in Phase 4)."
 fi
+
+echo "[5/5] Creating directories and config..."
+mkdir -p "$DATA_DIR"
+mkdir -p "$LOGS_DIR"
+echo "{\"project_dir\":\"$SCRIPT_DIR\"}" > ~/.openshield/config.json
+echo "      Data dir: $DATA_DIR"
+echo "      Logs dir: $LOGS_DIR"
+echo "      Config written: ~/.openshield/config.json"
 
 echo ""
 echo "========================================"
 echo "   Installation Complete!"
 echo "========================================"
 echo ""
-echo "Next steps:"
-echo "  1. Restart OpenCode (TUI, Web, or Desktop)"
-echo "  2. The plugin will automatically capture LLM responses"
-echo "  3. Captured data is stored in: $DATA_DIR"
+echo "To start the detection service:"
+echo "  cd core && python openshield-detect.py"
 echo ""
 echo "To uninstall, run: ./uninstall.sh"
 echo ""
