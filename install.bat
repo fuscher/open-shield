@@ -15,14 +15,44 @@ set "DATA_DIR=%USERPROFILE%\.openshield\captures"
 set "PLUGIN_SRC=%PROJECT_DIR%src\plugin\open_shield.ts"
 set "RULES_SRC=%PROJECT_DIR%core\rules"
 
+echo [0/5] Checking environment...
+
+python --version >nul 2>&1
+if errorlevel 1 (
+    echo       ERROR: Python not found. Install Python 3.9+ first.
+    pause
+    exit /b 1
+)
+python -c "import sys; print('      Python', sys.version.split()[0])"
+
+python -m pip --version >nul 2>&1
+if errorlevel 1 (
+    echo       ERROR: pip not found. Run: python -m ensurepip
+    pause
+    exit /b 1
+)
+echo       pip OK
+
+if exist "%PLUGIN_DIR%" (
+    echo       OpenCode config found.
+) else (
+    echo       NOTE: OpenCode config not found. Will be created on first OpenCode launch.
+)
+
 echo [1/5] Installing Python dependencies...
 cd /d "%PROJECT_DIR%"
-pip install -r core\requirements.txt -q
+pip install -r core\requirements.txt
 if errorlevel 1 (
-    echo       WARNING: pip install failed. Install manually:
-    echo       pip install -r core\requirements.txt
+    echo       Retrying with Tsinghua mirror...
+    pip install -r core\requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+    if errorlevel 1 (
+        echo       WARNING: pip install failed. Install manually:
+        echo         pip install -r core\requirements.txt
+    ) else (
+        echo       Dependencies installed via mirror.
+    )
 ) else (
-    echo       Dependencies installed.
+    echo       Dependencies ready.
 )
 
 echo [2/5] Copying detection rules...
@@ -54,7 +84,7 @@ if exist "%PROJECT_DIR%.opencode\skills\openShield-safety\SKILL.md" (
     copy /Y "%PROJECT_DIR%.opencode\skills\openShield-safety\SKILL.md" "%SKILL_DIR%" >nul
     echo       Skill installed to: %SKILL_DIR%
 ) else (
-    echo       Skill file not found, skipping (will be added in Phase 4).
+    echo       Skill file not found, skipping.
 )
 
 echo [5/5] Creating directories and config...
@@ -72,8 +102,8 @@ echo ========================================
 echo    Installation Complete!
 echo ========================================
 echo.
-echo To start the detection service:
-echo   cd core ^& python openshield-detect.py
+echo The plugin will auto-start the detection service on next OpenCode launch.
+echo To start manually: cd core ^& python openshield-detect.py
 echo.
 echo To uninstall, run: uninstall.bat
 echo.
