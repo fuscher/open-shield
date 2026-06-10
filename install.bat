@@ -66,6 +66,14 @@ if exist "%RULES_SRC%\keywords.yaml" (
     copy /Y "%RULES_SRC%\keywords.yaml" "%RULES_DIR%" >nul
     echo       keywords.yaml installed.
 )
+if exist "%RULES_SRC%\injection.yaml" (
+    copy /Y "%RULES_SRC%\injection.yaml" "%RULES_DIR%" >nul
+    echo       injection.yaml installed.
+)
+if exist "%RULES_SRC%\custom\*.yaml" (
+    xcopy /Y /Q "%RULES_SRC%\custom\*.yaml" "%RULES_DIR%\custom\" >nul
+    echo       custom rules installed.
+)
 
 echo [3/5] Installing plugin...
 if not exist "%PLUGIN_DIR%" mkdir "%PLUGIN_DIR%"
@@ -92,7 +100,7 @@ if not exist "%DATA_DIR%" mkdir "%DATA_DIR%"
 if not exist "%LOGS_DIR%" mkdir "%LOGS_DIR%"
 set "PROJECT_DIR_FWD=%PROJECT_DIR:\=/%"
 set "PROJECT_DIR_FWD=%PROJECT_DIR_FWD:~0,-1%"
-> "%USERPROFILE%\.openshield\config.json" echo {"project_dir":"%PROJECT_DIR_FWD%"}
+> "%USERPROFILE%\.openshield\config.json" echo {"project_dir":"%PROJECT_DIR_FWD%","webhooks":[]}
 echo       Data dir: %DATA_DIR%
 echo       Logs dir: %LOGS_DIR%
 echo       Config written: %USERPROFILE%\.openshield\config.json

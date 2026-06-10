@@ -60,6 +60,14 @@ if [ -f "$RULES_SRC/keywords.yaml" ]; then
     cp "$RULES_SRC/keywords.yaml" "$RULES_DIR/"
     echo "      keywords.yaml installed."
 fi
+if [ -f "$RULES_SRC/injection.yaml" ]; then
+    cp "$RULES_SRC/injection.yaml" "$RULES_DIR/"
+    echo "      injection.yaml installed."
+fi
+if ls "$RULES_SRC/custom/"*.yaml >/dev/null 2>&1; then
+    cp "$RULES_SRC/custom/"*.yaml "$RULES_DIR/custom/"
+    echo "      custom rules installed."
+fi
 
 echo "[3/5] Installing plugin..."
 mkdir -p "$PLUGIN_DIR"
@@ -83,7 +91,7 @@ fi
 echo "[5/5] Creating directories and config..."
 mkdir -p "$DATA_DIR"
 mkdir -p "$LOGS_DIR"
-echo "{\"project_dir\":\"$SCRIPT_DIR\"}" > "$HOME/.openshield/config.json"
+echo "{\"project_dir\":\"$SCRIPT_DIR\",\"webhooks\":[]}" > "$HOME/.openshield/config.json"
 echo "      Data dir: $DATA_DIR"
 echo "      Logs dir: $LOGS_DIR"
 echo "      Config written: $HOME/.openshield/config.json"

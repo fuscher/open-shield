@@ -18,6 +18,15 @@ if exist "%PLUGIN_FILE%" (
     echo       Plugin not found, skipping.
 )
 
+echo [1.5/3] Removing Skill...
+set "SKILL_DIR=%USERPROFILE%\.config\opencode\skills\openShield-safety"
+if exist "%SKILL_DIR%" (
+    rmdir /s /q "%SKILL_DIR%"
+    echo       Removed: %SKILL_DIR%
+) else (
+    echo       Skill not found, skipping.
+)
+
 echo [2/3] Removing plugin config...
 if exist "%DATA_DIR%\config.json" (
     del /f /q "%DATA_DIR%\config.json"

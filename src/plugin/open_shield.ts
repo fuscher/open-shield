@@ -1,7 +1,7 @@
-import { mkdirSync, writeFile, existsSync, readFileSync } from "node:fs"
+import { mkdirSync, writeFile, existsSync, readFileSync, copyFileSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
-import { spawn } from "node:child_process"
+import { spawn, execSync } from "node:child_process"
 
 // ==================== 类型定义 ====================
 
@@ -42,7 +42,16 @@ const HIGH_RISK_PATTERNS = [
   "dd if=", "mkfs", "drop table", "drop database", "truncate table",
 ]
 
-const MEDIUM_RISK_TOOLS = ["curl", "wget", "chmod", "chown"]
+const MEDIUM_RISK_TOOLS = [
+  "curl", "wget", "chmod", "chown",
+  "write", "edit", "overwrite",
+  "delete", "remove", "unlink",
+]
+
+const HIGH_RISK_TOOLS = [
+  "bash", "shell", "exec", "spawn",
+  "database", "query", "execute",
+]
 
 function detectToolRisk(tool: string, args: Record<string, unknown>): "low" | "medium" | "high" {
   const toolName = (tool || "").toLowerCase()
@@ -53,6 +62,7 @@ function detectToolRisk(tool: string, args: Record<string, unknown>): "low" | "m
     if (command.includes(pattern)) return "high"
   }
 
+  if (HIGH_RISK_TOOLS.includes(toolName)) return "high"
   if (MEDIUM_RISK_TOOLS.includes(toolName)) return "medium"
 
   return "low"
@@ -141,6 +151,8 @@ function extractMessageContent(info: any): string {
 
 // ==================== Python检测服务 ====================
 
+let serviceReady = false
+
 function getPythonServicePath(): string | null {
   try {
     if (!existsSync(CONFIG_PATH)) return null
@@ -152,12 +164,57 @@ function getPythonServicePath(): string | null {
   }
 }
 
-function startPythonService(): boolean {
-  const pyPath = getPythonServicePath()
-  if (!pyPath) return false
+function ensureRules(projectDir: string): void {
+  const rulesDir = join(OPENSHIELD_DIR, "rules")
+  const customDir = join(rulesDir, "custom")
+  ensureDirSync(customDir)
 
+  const srcDir = join(projectDir, "core", "rules")
+  for (const file of ["pii.yaml", "keywords.yaml", "injection.yaml"]) {
+    const dest = join(rulesDir, file)
+    const src = join(srcDir, file)
+    if (!existsSync(dest) && existsSync(src)) {
+      copyFileSync(src, dest)
+    }
+  }
+}
+
+function getPythonCommand(): string | null {
+  for (const cmd of ["python", "python3"]) {
+    try {
+      execSync(`"${cmd}" --version`, { stdio: "ignore" })
+      return cmd
+    } catch {
+      // try next
+    }
+  }
+  return null
+}
+
+async function waitForService(ms: number = 500, retries: number = 20): Promise<boolean> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const resp = await fetch(`${PYTHON_SERVICE_URL}/api/v1/health`, { signal: AbortSignal.timeout(1000) })
+      if (resp.ok) return true
+    } catch {
+      // not ready yet
+    }
+    await new Promise((r) => setTimeout(r, ms))
+  }
+  return false
+}
+
+function startPythonService(projectDir: string): boolean {
   try {
-    spawn("python", [pyPath], { stdio: "ignore", detached: true })
+    const pyPath = getPythonServicePath()
+    if (!pyPath) return false
+
+    ensureRules(projectDir)
+
+    const python = getPythonCommand()
+    if (!python) return false
+
+    spawn(python, [pyPath], { stdio: "ignore" })
     return true
   } catch {
     return false
@@ -165,6 +222,8 @@ function startPythonService(): boolean {
 }
 
 async function sendToDetectService(sessionID: string, data: any): Promise<any> {
+  if (!(await checkServiceHealth())) return null
+
   try {
     const response = await fetch(`${PYTHON_SERVICE_URL}/api/v1/detect/execute`, {
       method: "POST",
@@ -175,9 +234,80 @@ async function sendToDetectService(sessionID: string, data: any): Promise<any> {
         tool_args: data.args,
         timestamp: new Date().toISOString(),
       }),
+      signal: AbortSignal.timeout(5000),
     })
+
+    if (!response.ok) {
+      serviceReady = false
+      return null
+    }
+
     return await response.json()
   } catch (err) {
+    serviceReady = false
+    return null
+  }
+}
+
+// ==================== 服务健康检查 ====================
+
+const HEALTH_CHECK_INTERVAL = 60000
+let lastHealthCheck = 0
+
+async function checkServiceHealth(): Promise<boolean> {
+  const now = Date.now()
+  if (now - lastHealthCheck < HEALTH_CHECK_INTERVAL) {
+    return serviceReady
+  }
+  lastHealthCheck = now
+
+  try {
+    const resp = await fetch(`${PYTHON_SERVICE_URL}/api/v1/health`, {
+      signal: AbortSignal.timeout(3000),
+    })
+    const wasReady = serviceReady
+    serviceReady = resp.ok
+    if (wasReady && !serviceReady) {
+      console.error("[openShield] Python service became unavailable")
+    }
+    return serviceReady
+  } catch {
+    if (serviceReady) {
+      console.error("[openShield] Python service health check failed")
+    }
+    serviceReady = false
+    return false
+  }
+}
+
+async function sendToCaptureService(
+  sessionID: string,
+  content: string,
+  contentType: string
+): Promise<{ status: string; action: string; alerts: any[]; sanitized_content?: string } | null> {
+  if (!(await checkServiceHealth())) return null
+
+  try {
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/v1/capture`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: sessionID,
+        content,
+        content_type: contentType,
+        timestamp: new Date().toISOString(),
+      }),
+      signal: AbortSignal.timeout(5000),
+    })
+
+    if (!response.ok) {
+      serviceReady = false
+      return null
+    }
+
+    return await response.json()
+  } catch {
+    serviceReady = false
     return null
   }
 }
@@ -206,8 +336,24 @@ export const OpenShield = async ({ project }: { project: any }) => {
 
   // 自动启动 Python 检测服务
   if (AUTO_START_SERVICE) {
-    if (startPythonService()) {
-      await log("info", "Python detection service auto-started")
+    const projectDir = (() => {
+      try {
+        if (!existsSync(CONFIG_PATH)) return null
+        return JSON.parse(readFileSync(CONFIG_PATH, "utf-8")).project_dir
+      } catch {
+        return null
+      }
+    })()
+
+    if (projectDir && startPythonService(projectDir)) {
+      await log("info", "Python detection service spawning...")
+      const ready = await waitForService()
+      if (ready) {
+        serviceReady = true
+        await log("info", "Python detection service ready")
+      } else {
+        await log("warn", "Detection service not responding, using local rules only")
+      }
     } else {
       await log("warn", "Detection service not found, run install script first")
     }
@@ -287,6 +433,33 @@ export const OpenShield = async ({ project }: { project: any }) => {
       const args = output?.args || {}
       const riskLevel = detectToolRisk(tool, args)
 
+      if (riskLevel === "high") {
+        const result = await sendToDetectService(sessionID, { tool, args })
+
+        if (result?.action === "block") {
+          output.status = "deny"
+          await log("warn", "tool.execute.before blocked by Python engine", {
+            tool, sessionID, reason: result.reason, alerts: result.alerts?.length,
+          })
+          return
+        }
+
+        if (result?.action === "manual") {
+          await log("warn", "tool.execute.before requires manual review", {
+            tool, sessionID, alerts: result.alerts?.length,
+          })
+          return
+        }
+
+        if (!result) {
+          output.status = "deny"
+          await log("warn", "tool.execute.before blocked (local fallback, service unavailable)", {
+            tool, sessionID,
+          })
+          return
+        }
+      }
+
       if (riskLevel === "high" || riskLevel === "medium") {
         await log("warn", "tool.execute.before risk detected", {
           sessionID,
@@ -300,19 +473,16 @@ export const OpenShield = async ({ project }: { project: any }) => {
 
     "permission.ask": async (input: any, output: any) => {
       const toolName = (input.tool || "").toLowerCase()
-
-      if (toolName === "bash" || toolName === "shell") {
-        const sessionID = pickSessionID(input)
-        const result = await sendToDetectService(sessionID, {
+      const sessionID = pickSessionID(input)
+      const result = await sendToDetectService(sessionID, {
+        tool: toolName,
+        args: input.args || {},
+      })
+      if (result?.action === "block") {
+        output.status = "deny"
+        await log("warn", "permission.ask blocked by Python service", {
           tool: toolName,
-          args: input.args || {},
         })
-        if (result?.action === "block") {
-          output.status = "deny"
-          await log("warn", "permission.ask blocked by Python service", {
-            tool: toolName,
-          })
-        }
       }
     },
 
@@ -323,11 +493,29 @@ export const OpenShield = async ({ project }: { project: any }) => {
       if (!sessionID) return
 
       const buffer = getBuffer(sessionID)
+      const toolOutput = output?.output ?? output?.result ?? output ?? null
+
+      let contentToStore = toolOutput
+      if (toolOutput && typeof toolOutput === "string") {
+        const result = await sendToCaptureService(sessionID, toolOutput, "tool_output")
+        if (result?.sanitized_content) {
+          contentToStore = result.sanitized_content
+        }
+        if (result?.action === "block" || result?.action === "manual") {
+          await log("warn", "tool output risk detected", {
+            sessionID,
+            tool: input.tool,
+            action: result.action,
+            alertCount: result.alerts?.length,
+          })
+        }
+      }
+
       buffer.toolCalls.push({
         tool: input.tool || "unknown",
         callID: input.callID || input.callId || input.id || "",
         args: input.args || input.arguments || {},
-        output: output?.output ?? output?.result ?? output ?? null,
+        output: contentToStore,
         timestamp: getTimestamp(),
       })
       await log("debug", "tool.execute.after captured", {

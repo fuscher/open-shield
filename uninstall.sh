@@ -17,6 +17,15 @@ else
     echo "      Plugin not found, skipping."
 fi
 
+echo "[1.5/3] Removing Skill..."
+SKILL_DIR="$HOME/.config/opencode/skills/openShield-safety"
+if [ -d "$SKILL_DIR" ]; then
+    rm -rf "$SKILL_DIR"
+    echo "      Removed: $SKILL_DIR"
+else
+    echo "      Skill not found, skipping."
+fi
+
 echo "[2/3] Removing plugin config..."
 if [ -f "$DATA_DIR/config.json" ]; then
     rm -f "$DATA_DIR/config.json"

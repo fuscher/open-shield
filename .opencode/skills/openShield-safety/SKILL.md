@@ -1,5 +1,5 @@
 ---
-name: openShield-safety
+name: OpenShield-safety
 description: 安全操作指导 - 消息预处理检测和执行前安全建议
 license: Apache-2.0
 metadata:
@@ -7,7 +7,7 @@ metadata:
   workflow: security
 ---
 
-# openShield 安全操作指导
+# OpenShield 安全操作指导
 
 ## 用途
 

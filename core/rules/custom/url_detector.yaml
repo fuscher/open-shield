@@ -1,0 +1,8 @@
+# url_detector.yaml - 自定义 URL 检测规则示例
+# 将自定义 YAML 文件放入此目录即可扩展检测能力
+rules:
+  - name: url_detection
+    type: regex
+    pattern: "https?://[^\\s]+"
+    severity: low
+    description: "检测 URL 链接"
