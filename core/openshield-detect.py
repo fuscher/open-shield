@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""openShield Detect Service - 单文件检测服务"""
+"""OpenShield Detect Service - 单文件检测服务"""
 
 import os
 import re
 import json
 import asyncio
 import platform
-import subprocess
 import urllib.request
 from pathlib import Path
 from datetime import datetime
@@ -520,7 +519,7 @@ class DetectionLogger:
 
 # ==================== FastAPI 服务器 ====================
 
-app = FastAPI(title="openShield Detect Service")
+app = FastAPI(title="OpenShield Detect Service")
 config = Config()
 engine = DetectionEngine(config)
 notifier = NotificationManager(config)

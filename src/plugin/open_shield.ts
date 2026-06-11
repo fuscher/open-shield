@@ -122,7 +122,7 @@ function flushSync(sessionID: string): void {
       const buffer = getBuffer(sessionID)
       buffer.texts.push(...session.texts)
       buffer.toolCalls.push(...session.toolCalls)
-      console.error("[openShield] Failed to write capture file:", err)
+      console.error("[OpenShield] Failed to write capture file:", err)
     }
   })
 }
@@ -268,12 +268,12 @@ async function checkServiceHealth(): Promise<boolean> {
     const wasReady = serviceReady
     serviceReady = resp.ok
     if (wasReady && !serviceReady) {
-      console.error("[openShield] Python service became unavailable")
+      console.error("[OpenShield] Python service became unavailable")
     }
     return serviceReady
   } catch {
     if (serviceReady) {
-      console.error("[openShield] Python service health check failed")
+      console.error("[OpenShield] Python service health check failed")
     }
     serviceReady = false
     return false

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""openShield Phase 5 - 端到端测试"""
+"""OpenShield Phase 5 - 端到端测试"""
 
 import json
 import time
@@ -49,7 +49,7 @@ def call_api(endpoint, data=None, method="POST"):
         return None
 
 print("=" * 60)
-print("  openShield Phase 5 - E2E Tests")
+print("  OpenShield Phase 5 - E2E Tests")
 print("=" * 60)
 
 # Test 1: Health check
