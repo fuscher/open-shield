@@ -2,7 +2,7 @@
 
 > **文档版本**: v1.0  
 > **最后更新**: 2026-06-11  
-> **项目状态**: Stage 1-3 已完成
+> **项目状态**: Stage 1-4 已完成
 
 ---
 
@@ -73,7 +73,7 @@
 
 | 组件 | 位置 | 职责 | 延迟 |
 |------|------|------|------|
-| **Skill** | `.opencode/skills/openShield-safety/SKILL.md` | LLM 消息预处理检测 PII/关键词/恶意指令 | — |
+| **Skill** | `.opencode/skills/openshield-safety/SKILL.md` | LLM 消息预处理检测 PII/关键词/恶意指令 | — |
 | **Plugin** | `src/plugin/open_shield.ts` (529 行) | 数据捕获 + 执行前分级 + 权限控制 + 服务自启动 + 脱敏存储 | < 1ms |
 | **Python 引擎** | `core/openshield-detect.py` (607 行) | PII 检测/脱敏 + 注入检测 + 关键词匹配 + 通知 + 日志 + 规则热加载 | < 30ms |
 
@@ -394,8 +394,8 @@ open-shield/
 │           └── url_detector.yaml      # 自定义 URL 检测规则示例
 ├── .opencode/                         # OpenCode 插件生态配置
 │   └── skills/
-│       └── openShield-safety/
-│           └── SKILL.md               # 双重安全指导
+│       └── openshield-safety/
+│           └── SKILL.md               # 双重安全指导 + 阻断后处理指引
 ├── src/
 │   └── plugin/
 │       └── open_shield.ts             # TypeScript 插件（529 行）
@@ -405,7 +405,7 @@ open-shield/
 │   ├── Stage_1.md                     # Stage 1 完成报告
 │   ├── Stage_2.md                     # Stage 2 设计方案与完成报告
 │   ├── Stage_3.md                     # Stage 3 开发计划
-│   ├── Stage_4.md                     # 项目完整文档（本文件）
+│   ├── Stage_4.md                     # Stage 4 安全增强开发计划
 │   └── analysis/                      # 分析与修复报告
 ├── install.bat                        # Windows 安装脚本
 ├── install.sh                         # Linux/macOS 安装脚本
@@ -443,7 +443,7 @@ install.bat
 | [1/5] | pip install | 安装 fastapi, uvicorn, pydantic, pyyaml（失败时尝试清华镜像） |
 | [2/5] | 复制规则 | pii.yaml + keywords.yaml + injection.yaml + custom/*.yaml |
 | [3/5] | 复制插件 | open_shield.ts → `~/.config/opencode/plugins/` |
-| [4/5] | 复制 Skill | SKILL.md → `~/.config/opencode/skills/openShield-safety/` |
+| [4/5] | 复制 Skill | SKILL.md → `~/.config/opencode/skills/openshield-safety/` |
 | [5/5] | 创建目录和配置 | 创建 captures/、logs/ 目录，写入 config.json |
 
 ### 7.3 Linux/macOS 安装
@@ -470,14 +470,17 @@ chmod +x install.sh
 uninstall.bat
 ```
 
-**卸载流程**（3 步）：
+**卸载流程**（7 步）：
 
-| 步骤 | 操作 | 说明 |
+| 步骤 | 操作 | 交互 |
 |------|------|------|
-| [1/3] | 删除插件 | 删除 `~/.config/opencode/plugins/open_shield.ts` |
-| [1.5/3] | 删除 Skill | 删除 `~/.config/opencode/skills/openShield-safety/` 目录 |
-| [2/3] | 删除配置 | 删除 `~/.openshield/config.json` |
-| [3/3] | 清理数据 | 询问是否删除已捕获的数据（默认保留） |
+| [1/7] | 删除插件 | 自动删除 `~/.config/opencode/plugins/open_shield.ts` |
+| [2/7] | 删除 Skill | 自动删除 `~/.config/opencode/skills/openshield-safety/` |
+| [3/7] | 删除配置 | 自动删除 `~/.openshield/config.json` |
+| [4/7] | 删除规则 | 询问是否删除 `~/.openshield/rules/`（y/N） |
+| [5/7] | 删除日志 | 询问是否删除 `~/.openshield/logs/`（y/N） |
+| [6/7] | 删除捕获数据 | 询问是否删除 `~/.openshield/captures/`（y/N） |
+| [7/7] | 卸载 pip 依赖 | 询问是否卸载 fastapi uvicorn pydantic pyyaml（y/N），提示共享依赖风险 |
 
 ### 8.2 Linux/macOS 卸载
 
@@ -536,10 +539,10 @@ uninstall.bat
 
 | 限制 | 说明 |
 |------|------|
-| Skill 检测依赖 LLM 理解能力 | 精度有限，后续可接入 Python 服务做输入预处理 |
+| Skill 检测依赖 LLM 理解能力 | 精度有限，Stage 4 已新增结构化输出格式、分场景检测指南和误报判断指南提升精度 |
 | Python 服务需手动安装依赖 | 不在插件中自动 `pip install`（避免权限与延迟问题） |
 | Windows Toast 需 PowerShell | 零依赖代价：弹窗需一次轻量进程 |
-| 卸载脚本不清理 pip 依赖 | 正确行为：fastapi/uvicorn 为通用依赖 |
+| PII 检测可能误报 | Stage 4 已将 `tool.execute.after` 改为仅对高/中风险工具输出送检，低风险工具（read/grep/glob 等）跳过 PII 检测 |
 | macOS 通知待适配 | 需要 `osascript` 或 `terminal-notifier` 方案 |
 
 ---
@@ -562,11 +565,12 @@ uninstall.bat
 
 ## 十四、总结
 
-openShield 通过三个阶段的迭代开发，成功构建了一个完整的 AI Agent 安全中间件：
+openShield 通过四个阶段的迭代开发，成功构建了一个完整的 AI Agent 安全中间件：
 
 1. **Stage 1** 建立了数据捕获基础，通过 7 个 Hook 机制实时捕获 LLM 输出和用户输入
 2. **Stage 2** 实现了双重检测架构，Skill 指导 LLM 进行消息预处理检测，Plugin 拦截工具调用进行执行模式检测
 3. **Stage 3** 增强了检测能力，新增提示词注入检测、PII 脱敏替换、规则热加载和 Webhook 通知
+4. **Stage 4** 修复了 5 个关键问题：PII 检测误报（after hook 风险预筛）、卸载脚本粒度不足（7 步交互式卸载）、Skill 检测精度（结构化输出+分场景+误报指南）、阻断后用户不知情（throw Error 替代静默 deny）、Skill 命名规范（小写化），并通过 Phase 0 运行时验证确认了 throw Error 阻断机制的可靠性
 
 项目采用渐进式增强策略，本地规则始终可用，Python 引擎作为增强层按需调用。这种设计确保了即使在 Python 服务不可用的情况下，核心安全防护能力依然有效。
 

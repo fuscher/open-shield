@@ -542,6 +542,7 @@ async def receive_capture(data: CaptureData, background_tasks: BackgroundTasks):
             "alerts": len(result.alerts),
             "action": result.action,
             "sanitized_content": result.sanitized_content,
+            "reason": "；".join(a.description for a in result.alerts[:3]) if result.alerts else None,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -567,12 +568,16 @@ async def detect_execute(data: ExecuteDetectionRequest, background_tasks: Backgr
 
         await logger.log_detection(result)
 
+        reason = None
+        if result.alerts:
+            reason = "；".join(a.description for a in result.alerts[:3])
+
         return ExecuteDetectionResponse(
             session_id=data.session_id,
             timestamp=datetime.now().isoformat(),
             action=result.action,
             alerts=result.alerts,
-            reason=f"Detected {len(result.alerts)} risk items" if result.alerts else None
+            reason=reason
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

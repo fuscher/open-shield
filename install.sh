@@ -7,7 +7,7 @@ echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$HOME/.config/opencode/plugins"
-SKILL_DIR="$HOME/.config/opencode/skills/openShield-safety"
+SKILL_DIR="$HOME/.config/opencode/skills/openshield-safety"
 RULES_DIR="$HOME/.openshield/rules"
 LOGS_DIR="$HOME/.openshield/logs"
 DATA_DIR="$HOME/.openshield/captures"
@@ -81,8 +81,8 @@ fi
 
 echo "[4/5] Installing Skill..."
 mkdir -p "$SKILL_DIR"
-if [ -f "$SCRIPT_DIR/.opencode/skills/openShield-safety/SKILL.md" ]; then
-    cp "$SCRIPT_DIR/.opencode/skills/openShield-safety/SKILL.md" "$SKILL_DIR/"
+if [ -f "$SCRIPT_DIR/.opencode/skills/openshield-safety/SKILL.md" ]; then
+    cp "$SCRIPT_DIR/.opencode/skills/openshield-safety/SKILL.md" "$SKILL_DIR/"
     echo "      Skill installed to: $SKILL_DIR"
 else
     echo "      Skill file not found, skipping."

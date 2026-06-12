@@ -8,7 +8,7 @@ echo.
 
 set "PROJECT_DIR=%~dp0"
 set "PLUGIN_DIR=%USERPROFILE%\.config\opencode\plugins"
-set "SKILL_DIR=%USERPROFILE%\.config\opencode\skills\openShield-safety"
+set "SKILL_DIR=%USERPROFILE%\.config\opencode\skills\openshield-safety"
 set "RULES_DIR=%USERPROFILE%\.openshield\rules"
 set "LOGS_DIR=%USERPROFILE%\.openshield\logs"
 set "DATA_DIR=%USERPROFILE%\.openshield\captures"
@@ -88,8 +88,8 @@ if exist "%PLUGIN_SRC%" (
 
 echo [4/5] Installing Skill...
 if not exist "%SKILL_DIR%" mkdir "%SKILL_DIR%"
-if exist "%PROJECT_DIR%.opencode\skills\openShield-safety\SKILL.md" (
-    copy /Y "%PROJECT_DIR%.opencode\skills\openShield-safety\SKILL.md" "%SKILL_DIR%" >nul
+if exist "%PROJECT_DIR%.opencode\skills\openshield-safety\SKILL.md" (
+    copy /Y "%PROJECT_DIR%.opencode\skills\openshield-safety\SKILL.md" "%SKILL_DIR%" >nul
     echo       Skill installed to: %SKILL_DIR%
 ) else (
     echo       Skill file not found, skipping.
