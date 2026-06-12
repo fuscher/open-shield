@@ -284,6 +284,7 @@ async function sendToCaptureService(
   sessionID: string,
   content: string,
   contentType: string
+// 注：Python 端响应中还包含 reason 字段（预留），当前未消费
 ): Promise<{ status: string; action: string; alerts: any[]; sanitized_content?: string } | null> {
   if (!(await checkServiceHealth())) return null
 
@@ -437,34 +438,47 @@ export const OpenShield = async ({ project }: { project: any }) => {
         const result = await sendToDetectService(sessionID, { tool, args })
 
         if (result?.action === "block") {
-          output.status = "deny"
-          await log("warn", "tool.execute.before blocked by Python engine", {
-            tool, sessionID, reason: result.reason, alerts: result.alerts?.length,
+          const reason = result.reason || "高危操作被安全插件拦截"
+          await log("warn", "tool.execute.before blocked", {
+            tool, sessionID, reason,
+            alerts: result.alerts?.length,
           })
-          return
+          throw new Error(`[OpenShield] 操作被拦截：${reason}`)
         }
 
         if (result?.action === "manual") {
-          await log("warn", "tool.execute.before requires manual review", {
-            tool, sessionID, alerts: result.alerts?.length,
+          const reason = result.reason || "此操作需要人工审查"
+          await log("warn", "tool.execute.before manual review block", {
+            tool, sessionID, reason,
+            alerts: result.alerts?.length,
           })
-          return
+          throw new Error(
+            `[OpenShield] 操作需人工确认：${reason}。请向用户说明风险，由用户决定是否手动执行或修改命令后重试。`
+          )
         }
 
         if (!result) {
-          output.status = "deny"
-          await log("warn", "tool.execute.before blocked (local fallback, service unavailable)", {
-            tool, sessionID,
-          })
+          const argsStr = JSON.stringify(args).toLowerCase()
+          const hasCriticalPattern = HIGH_RISK_PATTERNS.some(p => argsStr.includes(p))
+          if (hasCriticalPattern) {
+            await log("warn", "tool.execute.before fallback block (critical pattern, service unavailable)", {
+              tool, sessionID,
+            })
+            throw new Error(
+              "[OpenShield] 安全检测服务不可用，且命令包含高危操作模式，已阻断。请等待服务恢复或修改命令。"
+            )
+          } else {
+            await log("warn", "tool.execute.before service unavailable, high-risk tool allowed with warning", {
+              tool, sessionID,
+            })
+          }
           return
         }
       }
 
-      if (riskLevel === "high" || riskLevel === "medium") {
-        await log("warn", "tool.execute.before risk detected", {
-          sessionID,
-          tool,
-          riskLevel,
+      if (riskLevel === "medium") {
+        await log("info", "tool.execute.before medium risk detected", {
+          sessionID, tool, riskLevel,
         })
       }
     },
@@ -472,16 +486,19 @@ export const OpenShield = async ({ project }: { project: any }) => {
     // ==================== permission.ask — 权限请求处理 ====================
 
     "permission.ask": async (input: any, output: any) => {
-      const toolName = (input.tool || "").toLowerCase()
+      const toolName = (input.type || input.tool || "").toLowerCase()
       const sessionID = pickSessionID(input)
+
+      const riskLevel = detectToolRisk(toolName, input.args || {})
+      if (riskLevel !== "high") return
+
       const result = await sendToDetectService(sessionID, {
-        tool: toolName,
-        args: input.args || {},
+        tool: toolName, args: input.args || {},
       })
       if (result?.action === "block") {
         output.status = "deny"
-        await log("warn", "permission.ask blocked by Python service", {
-          tool: toolName,
+        await log("warn", "permission.ask blocked", {
+          tool: toolName, reason: result.reason,
         })
       }
     },
@@ -497,17 +514,18 @@ export const OpenShield = async ({ project }: { project: any }) => {
 
       let contentToStore = toolOutput
       if (toolOutput && typeof toolOutput === "string") {
-        const result = await sendToCaptureService(sessionID, toolOutput, "tool_output")
-        if (result?.sanitized_content) {
-          contentToStore = result.sanitized_content
-        }
-        if (result?.action === "block" || result?.action === "manual") {
-          await log("warn", "tool output risk detected", {
-            sessionID,
-            tool: input.tool,
-            action: result.action,
-            alertCount: result.alerts?.length,
-          })
+        const riskLevel = detectToolRisk(input.tool, input.args || {})
+        if (riskLevel === "high" || riskLevel === "medium") {
+          const result = await sendToCaptureService(sessionID, toolOutput, "tool_output")
+          if (result?.sanitized_content) {
+            contentToStore = result.sanitized_content
+          }
+          if (result?.action === "block" || result?.action === "manual") {
+            await log("warn", "tool output risk detected", {
+              sessionID, tool: input.tool, action: result.action,
+              alertCount: result.alerts?.length,
+            })
+          }
         }
       }
 
