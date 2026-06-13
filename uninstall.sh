@@ -13,6 +13,16 @@ RULES_DIR="$DATA_DIR/rules"
 LOGS_DIR="$DATA_DIR/logs"
 CAPTURES_DIR="$DATA_DIR/captures"
 
+echo "[0/7] Checking if OpenCode is running..."
+if pgrep -x opencode >/dev/null 2>&1; then
+    echo "      WARNING: OpenCode appears to be running."
+    read -p "      Continue with uninstall? (y/N): " CONTINUE
+    if [ "$CONTINUE" != "y" ] && [ "$CONTINUE" != "Y" ]; then
+        echo "      Uninstall cancelled."
+        exit 0
+    fi
+fi
+
 echo "[1/7] Removing plugin..."
 if [ -f "$PLUGIN_FILE" ]; then
     rm -f "$PLUGIN_FILE"
@@ -39,7 +49,7 @@ fi
 
 echo "[4/7] Cleaning up detection rules..."
 echo ""
-read -p "Do you want to delete custom rules? (y/N): " DELETE_RULES
+read -p "Do you want to delete detection rules? (y/N): " DELETE_RULES
 if [ "$DELETE_RULES" = "y" ] || [ "$DELETE_RULES" = "Y" ]; then
     if [ -d "$RULES_DIR" ]; then
         rm -rf "$RULES_DIR"
@@ -84,13 +94,26 @@ echo ""
 echo "      Affected packages: fastapi uvicorn pydantic pyyaml"
 echo "      NOTE: These are common dependencies that other projects may use."
 echo ""
+
+PYTHON_CMD=""
+for cmd in python3 python; do
+    if "$cmd" --version >/dev/null 2>&1; then
+        PYTHON_CMD="$cmd"
+        break
+    fi
+done
+
 read -p "Do you want to uninstall them? (y/N): " PIP_UNINSTALL
 if [ "$PIP_UNINSTALL" = "y" ] || [ "$PIP_UNINSTALL" = "Y" ]; then
-    pip uninstall -y fastapi uvicorn pydantic pyyaml 2>/dev/null
-    if [ $? -eq 0 ]; then
-        echo "      Dependencies uninstalled."
+    if [ -n "$PYTHON_CMD" ]; then
+        $PYTHON_CMD -m pip uninstall -y fastapi uvicorn pydantic pyyaml 2>/dev/null
+        if [ $? -eq 0 ]; then
+            echo "      Dependencies uninstalled."
+        else
+            echo "      Some dependencies may not have been installed."
+        fi
     else
-        echo "      Some dependencies may not have been installed."
+        echo "      Python not found, cannot uninstall. Remove manually with pip."
     fi
 else
     echo "      Dependencies preserved."

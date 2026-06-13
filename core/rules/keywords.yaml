@@ -1,6 +1,14 @@
 keyword_rules:
-  - category: database
-    keywords: ["delete", "drop", "truncate", "删除", "清空"]
+  - category: database_dangerous
+    keywords:
+      - "drop table"
+      - "drop database"
+      - "drop index"
+      - "truncate table"
+      - "delete from"
+      - "删除表"
+      - "清空表"
+      - "删除数据库"
     severity: high
     description: "数据库危险操作"
 
@@ -14,7 +22,12 @@ keyword_rules:
     severity: critical
     description: "系统危险操作"
 
+  - category: system_command
+    keywords: ["rm ", "rmdir", "del ", "Remove-Item"]
+    severity: high
+    description: "删除命令"
+
   - category: network
-    keywords: ["curl", "wget", "fetch"]
+    keywords: ["curl", "wget"]
     severity: low
     description: "网络请求"

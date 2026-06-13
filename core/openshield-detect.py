@@ -231,20 +231,31 @@ class KeywordDetector:
                 "description": rule.get("description", "")
             })
 
+    def _build_pattern(self, keyword: str) -> re.Pattern:
+        """根据关键词类型构建匹配模式"""
+        if re.search(r'[\u4e00-\u9fff]', keyword):
+            return re.compile(re.escape(keyword))
+        elif keyword.endswith(' '):
+            trimmed = keyword.rstrip()
+            return re.compile(r'\b' + re.escape(trimmed) + r'\s+')
+        else:
+            return re.compile(r'\b' + re.escape(keyword) + r'\b')
+
     def detect(self, content: str) -> List[Alert]:
         alerts = []
         content_lower = content.lower()
 
         for group in self.keyword_groups:
             for keyword in group["keywords"]:
-                if keyword in content_lower:
-                    position = content_lower.find(keyword)
+                pattern = self._build_pattern(keyword)
+                match = pattern.search(content_lower)
+                if match:
                     alerts.append(Alert(
                         type="keyword_detected",
                         severity=group["severity"],
                         rule_name=f"keyword_{group['category']}",
-                        matched_content=content[max(0, position - 20):position + len(keyword) + 20],
-                        position=position,
+                        matched_content=content[max(0, match.start() - 20):match.end() + 20],
+                        position=match.start(),
                         description=group["description"]
                     ))
                     break

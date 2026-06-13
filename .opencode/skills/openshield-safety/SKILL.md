@@ -28,9 +28,10 @@ metadata:
 - API 密钥（sk-xxx, ak-xxx, key-xxx）
 
 #### 危险关键词检测
-- 数据库操作：delete, drop, truncate, DELETE, DROP, TRUNCATE
-- 系统操作：rm -rf, format, reboot, shutdown
+- 数据库操作：drop table, drop database, drop index, truncate table, delete from, 删除表, 清空表, 删除数据库
+- 系统操作：rm -rf, format, reboot, shutdown, 重启, 关机, rm, rmdir, del, Remove-Item
 - 财务操作：转账, 汇款, payment, transfer
+- 网络请求：curl, wget
 
 #### 恶意指令检测
 - 提示词注入尝试（如 "ignore previous instructions", "you are now DAN"）

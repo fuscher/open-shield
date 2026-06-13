@@ -14,6 +14,19 @@ set "RULES_DIR=%DATA_DIR%\rules"
 set "LOGS_DIR=%DATA_DIR%\logs"
 set "CAPTURES_DIR=%DATA_DIR%\captures"
 
+echo [0/7] Checking if OpenCode is running...
+tasklist /FI "IMAGENAME eq opencode.exe" 2>nul | find /I "opencode.exe" >nul
+if not errorlevel 1 (
+    echo       WARNING: OpenCode appears to be running.
+    set CONTINUE=n
+    set /p "CONTINUE=      Continue with uninstall? (y/N): "
+    if /i not "!CONTINUE!"=="y" (
+        echo       Uninstall cancelled.
+        pause
+        exit /b 0
+    )
+)
+
 echo [1/7] Removing plugin...
 if exist "%PLUGIN_FILE%" (
     del /f /q "%PLUGIN_FILE%"
@@ -40,7 +53,7 @@ if exist "%DATA_DIR%\config.json" (
 
 echo [4/7] Cleaning up detection rules...
 echo.
-set /p "DELETE_RULES=Do you want to delete custom rules? (y/N): "
+set /p "DELETE_RULES=Do you want to delete detection rules? (y/N): "
 if /i "%DELETE_RULES%"=="y" (
     if exist "%RULES_DIR%" (
         rmdir /s /q "%RULES_DIR%"
@@ -85,13 +98,24 @@ echo.
 echo       Affected packages: fastapi uvicorn pydantic pyyaml
 echo       NOTE: These are common dependencies that other projects may use.
 echo.
+
+set "PYTHON_CMD="
+for %%c in (python python3) do (
+    %%c --version >nul 2>&1
+    if not errorlevel 1 set "PYTHON_CMD=%%c"
+)
+
 set /p "PIP_UNINSTALL=Do you want to uninstall them? (y/N): "
 if /i "%PIP_UNINSTALL%"=="y" (
-    pip uninstall -y fastapi uvicorn pydantic pyyaml 2>nul
-    if not errorlevel 1 (
-        echo       Dependencies uninstalled.
+    if not "%PYTHON_CMD%"=="" (
+        %PYTHON_CMD% -m pip uninstall -y fastapi uvicorn pydantic pyyaml 2>nul
+        if not errorlevel 1 (
+            echo       Dependencies uninstalled.
+        ) else (
+            echo       Some dependencies may not have been installed.
+        )
     ) else (
-        echo       Some dependencies may not have been installed.
+        echo       Python not found, cannot uninstall. Remove manually with pip.
     )
 ) else (
     echo       Dependencies preserved.

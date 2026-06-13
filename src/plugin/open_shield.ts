@@ -49,12 +49,41 @@ const MEDIUM_RISK_TOOLS = [
 ]
 
 const HIGH_RISK_TOOLS = [
-  "bash", "shell", "exec", "spawn",
   "database", "query", "execute",
+]
+
+const SAFE_COMMAND_PREFIXES = [
+  "ls", "dir", "pwd", "cat", "head", "tail", "less", "more",
+  "mkdir", "cp", "copy", "mv", "move", "touch", "ln",
+  "grep", "find", "which", "where", "whoami",
+  "date", "env", "printenv", "echo",
+  "git",
+  "npm", "npx", "yarn", "pnpm", "bun",
+  "node", "deno", "python", "python3", "pip", "pip3",
+  "cargo", "rustc", "go", "java", "javac", "tsc",
+  "eslint", "prettier", "ruff", "biome",
+  "pytest", "jest", "vitest", "mocha",
+  "docker", "kubectl", "helm",
+  "code", "vim", "nano",
 ]
 
 function detectToolRisk(tool: string, args: Record<string, unknown>): "low" | "medium" | "high" {
   const toolName = (tool || "").toLowerCase()
+
+  if (toolName === "bash" || toolName === "shell" || toolName === "exec") {
+    const command = String(args.command || args.script || args.cmd || "").toLowerCase().trim()
+    if (!command) return "low"
+
+    for (const pattern of HIGH_RISK_PATTERNS) {
+      if (command.includes(pattern)) return "high"
+    }
+
+    const firstToken = command.split(/\s+/)[0]
+    if (SAFE_COMMAND_PREFIXES.includes(firstToken)) return "low"
+
+    return "medium"
+  }
+
   const argsStr = JSON.stringify(args).toLowerCase()
   const command = `${toolName} ${argsStr}`
 
@@ -318,6 +347,10 @@ async function sendToCaptureService(
 export const OpenShield = async ({ project }: { project: any }) => {
   ensureDirSync(DATA_DIR)
 
+  // 运行时验证标志位（方案 D）
+  let permissionAskTriggered = false
+  let firstBashChecked = false
+
   const log = async (level: string, message: string, extra?: any) => {
     try {
       await project.client.app.log({
@@ -427,58 +460,30 @@ export const OpenShield = async ({ project }: { project: any }) => {
       await log("debug", "chat.message captured", { sessionID, len: content.length })
     },
 
-    // ==================== tool.execute.before — 执行前风险检测 ====================
+    // ==================== tool.execute.before — 执行前日志记录 ====================
 
     "tool.execute.before": async (input: any, output: any) => {
       const { tool, sessionID } = input
+      const toolName = (tool || "").toLowerCase()
       const args = output?.args || {}
       const riskLevel = detectToolRisk(tool, args)
 
-      if (riskLevel === "high") {
-        const result = await sendToDetectService(sessionID, { tool, args })
-
-        if (result?.action === "block") {
-          const reason = result.reason || "高危操作被安全插件拦截"
-          await log("warn", "tool.execute.before blocked", {
-            tool, sessionID, reason,
-            alerts: result.alerts?.length,
-          })
-          throw new Error(`[OpenShield] 操作被拦截：${reason}`)
-        }
-
-        if (result?.action === "manual") {
-          const reason = result.reason || "此操作需要人工审查"
-          await log("warn", "tool.execute.before manual review block", {
-            tool, sessionID, reason,
-            alerts: result.alerts?.length,
-          })
-          throw new Error(
-            `[OpenShield] 操作需人工确认：${reason}。请向用户说明风险，由用户决定是否手动执行或修改命令后重试。`
-          )
-        }
-
-        if (!result) {
-          const argsStr = JSON.stringify(args).toLowerCase()
-          const hasCriticalPattern = HIGH_RISK_PATTERNS.some(p => argsStr.includes(p))
-          if (hasCriticalPattern) {
-            await log("warn", "tool.execute.before fallback block (critical pattern, service unavailable)", {
-              tool, sessionID,
-            })
-            throw new Error(
-              "[OpenShield] 安全检测服务不可用，且命令包含高危操作模式，已阻断。请等待服务恢复或修改命令。"
-            )
-          } else {
-            await log("warn", "tool.execute.before service unavailable, high-risk tool allowed with warning", {
-              tool, sessionID,
-            })
-          }
-          return
+      // 运行时验证：首次 bash 调用后检查 permission.ask 是否触发
+      if (!firstBashChecked && (toolName === "bash" || toolName === "shell")) {
+        firstBashChecked = true
+        if (!permissionAskTriggered) {
+          await log("warn", [
+            "[OpenShield] 确认：permission.ask hook 未被触发，bash 权限可能为 'allow'。",
+            "安全检测流程未激活，请配置 permission.bash 为 'ask'"
+          ].join(" "))
+        } else {
+          await log("info", "[OpenShield] 权限配置正确，permission.ask hook 已生效")
         }
       }
 
-      if (riskLevel === "medium") {
-        await log("info", "tool.execute.before medium risk detected", {
-          sessionID, tool, riskLevel,
+      if (riskLevel === "high" || riskLevel === "medium") {
+        await log("info", `tool.execute.before ${riskLevel} risk detected`, {
+          sessionID, tool,
         })
       }
     },
@@ -486,20 +491,47 @@ export const OpenShield = async ({ project }: { project: any }) => {
     // ==================== permission.ask — 权限请求处理 ====================
 
     "permission.ask": async (input: any, output: any) => {
+      permissionAskTriggered = true
+
       const toolName = (input.type || input.tool || "").toLowerCase()
       const sessionID = pickSessionID(input)
+      const args = input.args || input.arguments || {}
 
-      const riskLevel = detectToolRisk(toolName, input.args || {})
-      if (riskLevel !== "high") return
+      const riskLevel = detectToolRisk(toolName, args)
+      if (riskLevel === "low") return
 
       const result = await sendToDetectService(sessionID, {
-        tool: toolName, args: input.args || {},
+        tool: toolName, args,
       })
+
       if (result?.action === "block") {
         output.status = "deny"
         await log("warn", "permission.ask blocked", {
           tool: toolName, reason: result.reason,
         })
+        return
+      }
+
+      if (result?.action === "manual") {
+        output.status = "ask"
+        await log("warn", "permission.ask requiring user confirmation", {
+          tool: toolName, reason: result.reason,
+        })
+        return
+      }
+
+      if (!result) {
+        if (riskLevel === "high") {
+          const argsStr = JSON.stringify(args).toLowerCase()
+          const hasCriticalPattern = HIGH_RISK_PATTERNS.some(p => argsStr.includes(p))
+          if (hasCriticalPattern) {
+            output.status = "deny"
+            await log("warn", "permission.ask fallback block (service unavailable)", { tool: toolName })
+          } else {
+            output.status = "ask"
+            await log("warn", "permission.ask fallback ask (service unavailable)", { tool: toolName })
+          }
+        }
       }
     },
 
