@@ -1,8 +1,8 @@
-# openShield 项目完整文档
+# OpenShield 项目完整文档
 
-> **文档版本**: v1.0  
-> **最后更新**: 2026-06-11  
-> **项目状态**: Stage 1-4 已完成
+> **文档版本**: v2.0  
+> **最后更新**: 2026-06-14  
+> **项目状态**: Stage 1-6 已完成
 
 ---
 
@@ -10,7 +10,7 @@
 
 ### 1.1 项目定位
 
-**openShield** 是一个**为 AI Agent 设计的安全中间件**，专门针对 [OpenCode](https://opencode.ai/) 平台。它通过双重检测机制，在用户输入阶段和工具执行阶段分别拦截安全风险，为 AI Agent 提供全方位的安全防护。
+**OpenShield** 是一个**为 AI Agent 设计的安全中间件**，专门针对 [OpenCode](https://opencode.ai/) 平台。它通过双重检测机制，在用户输入阶段和工具执行阶段分别拦截安全风险，为 AI Agent 提供全方位的安全防护。
 
 ### 1.2 核心价值
 
@@ -41,7 +41,7 @@
 
 ## 二、项目架构
 
-### 2.1 整体架构（三层）
+### 2.1 整体架构（四层）
 
 ```
 用户输入
@@ -55,15 +55,26 @@
 ┌─────────────────────────────────────────────┐
 │  Plugin (执行模式检测层)                      │
 │  TypeScript 插件，拦截工具调用                 │
-│  tool.execute.before → 本地分级 < 1ms        │
-│  tool.execute.after  → 输出送检 + PII 脱敏   │
+│  tool.execute.before → 本地分级 + 路径沙箱    │
+│  tool.execute.after  → 输出脱敏 + PII 检测   │
 │  permission.ask      → Python 引擎精确判定    │
+│  message.updated     → 响应内容防火墙         │
+│  session.idle        → 会话异常检测           │
+└──────────────────┬──────────────────────────┘
+                   ↓
+┌─────────────────────────────────────────────┐
+│  MITM 纵深防御层 (Stage 6)                    │
+│  Phase A: 响应内容监控（社会工程/钓鱼检测）     │
+│  Phase B: 文件操作沙箱（路径黑白名单）          │
+│  Phase C: 工具输出脱敏（敏感信息实时脱敏）      │
+│  Phase D: 会话异常检测（行为模式分析）          │
 └──────────────────┬──────────────────────────┘
                    ↓
 ┌─────────────────────────────────────────────┐
 │  Python 检测引擎 (localhost:9527)             │
-│  FastAPI 单文件服务（607 行）                  │
+│  FastAPI 单文件服务 + Bearer Token 认证       │
 │  PII 检测/脱敏 + 注入检测 + 关键词匹配        │
+│  输出敏感信息检测 + 响应内容扫描               │
 │  桌面通知 + Webhook + JSONL 日志              │
 │  规则热加载（YAML mtime 监控）                │
 └─────────────────────────────────────────────┘
@@ -74,8 +85,8 @@
 | 组件 | 位置 | 职责 | 延迟 |
 |------|------|------|------|
 | **Skill** | `.opencode/skills/openshield-safety/SKILL.md` | LLM 消息预处理检测 PII/关键词/恶意指令 | — |
-| **Plugin** | `src/plugin/open_shield.ts` (529 行) | 数据捕获 + 执行前分级 + 权限控制 + 服务自启动 + 脱敏存储 | < 1ms |
-| **Python 引擎** | `core/openshield-detect.py` (607 行) | PII 检测/脱敏 + 注入检测 + 关键词匹配 + 通知 + 日志 + 规则热加载 | < 30ms |
+| **Plugin** | `src/plugin/open_shield.ts` | 数据捕获 + 执行前分级 + 路径沙箱 + 权限控制 + 输出脱敏 + 响应监控 + 会话分析 + 服务自启动 | < 1ms |
+| **Python 引擎** | `core/openshield-detect.py` | PII 检测/脱敏 + 注入检测 + 关键词匹配 + 输出敏感信息检测 + 通知 + 日志 + 规则热加载 + Bearer Token 认证 | < 30ms |
 
 ### 2.3 技术选型
 
@@ -92,11 +103,12 @@
 | Hook | 类型 | 触发时机 | 用途 |
 |------|------|---------|------|
 | `chat.message` | 命名 hook | 用户消息到达 | 捕获用户输入 |
-| `event` (message.updated) | 事件 | 消息更新 | 捕获 LLM 回复 |
-| `tool.execute.before` | 命名 hook | 工具执行前 | 本地风险分级 |
-| `tool.execute.after` | 命名 hook | 工具执行后 | 捕获执行结果 + 送检 |
-| `permission.ask` | 命名 hook | 权限检查 | 调用 Python 引擎精确判定 |
-| `event` (session.idle) | 事件 | 会话空闲 | 持久化捕获数据 |
+| `event` (message.updated) | 事件 | 消息更新 | 捕获 LLM 回复 + Phase A 响应内容监控 |
+| `tool.execute.before` | 命名 hook | 工具执行前 | 本地风险分级 + Phase B 路径沙箱 |
+| `tool.execute.after` | 命名 hook | 工具执行后 | Phase C 输出脱敏 + 捕获执行结果 |
+| `permission.ask` | 命名 hook | 权限检查 | 调用 Python 引擎精确判定（bash 白名单分级） |
+| `event` (permission.asked) | 事件 | 权限确认后 | 只读事件，日志记录 |
+| `event` (session.idle) | 事件 | 会话空闲 | Phase D 会话异常检测 + 持久化捕获数据 |
 | `event` (session.*) | 事件 | 会话生命周期 | 会话状态日志 |
 
 ---
@@ -152,6 +164,56 @@
 | 5 | 规则热加载 | `_check_and_reload()` 监控 YAML mtime，含删除感知 |
 | 6 | Webhook 通知 | 支持 Slack/钉钉/飞书 HTTP Webhook 告警推送 |
 
+### 3.4 Stage 4 — 降低误报率与用户交互优化
+
+| 项目 | 内容 |
+|------|------|
+| **完成时间** | 2026-06-12 |
+| **E2E 测试** | 30/30 全部通过 |
+
+**核心成果**:
+- PII 检测误报优化：`tool.execute.after` 仅对高/中风险工具输出送检，低风险工具（read/grep/glob 等）跳过 PII 检测
+- 卸载脚本粒度优化：7 步交互式卸载，用户可选择保留规则/日志/数据
+- Skill 检测精度提升：结构化输出格式 + 分场景检测指南 + 误报判断指南
+- 阻断后用户感知优化：`throw Error` 替代静默 deny，用户可见阻断原因
+- Skill 命名规范化：统一为小写命名
+
+### 3.5 Stage 5 — 降低误报率与权限交互
+
+| 项目 | 内容 |
+|------|------|
+| **完成时间** | 2026-06-13 |
+| **E2E 测试** | 30/30 全部通过 |
+
+**核心成果**:
+- Bash 命令白名单分级：`git status`、`npm install`、`ls` 等无害命令直接放行，消除高频误报
+- `permission.ask` hook 集成：高风险操作触发 OpenCode 权限确认 UI（allow/deny/ask 三态）
+- 关键词边界匹配优化：`delete`/`drop`/`fetch` 不再匹配变量名（如 `handleDelete`），使用正则边界 `\b`
+- Service Token 认证：Python 引擎添加 Bearer Token 认证，防止本地未授权访问
+- 安装脚本生成 `~/.openshield/service.token`，Plugin 端自动加载 Token
+
+### 3.6 Stage 6 — MITM 纵深防御
+
+| 项目 | 内容 |
+|------|------|
+| **完成时间** | 2026-06-14 |
+| **E2E 测试** | 30 用例全部通过 |
+| **实现状态** | Phase B/C 完整实现，Phase A/D 简化版本地实现 |
+
+**四层纵深防御**:
+
+| Phase | 功能 | 实现方式 | 状态 |
+|-------|------|---------|------|
+| **A** | 响应内容监控 | 拦截 `message.updated` (assistant)，累积内容后送检，检测钓鱼/社会工程/注入 | ✅ 简化实现 |
+| **B** | 文件操作沙箱 | `checkPathPolicy()` 路径黑白名单 + `throw Error` 阻断，防止关键文件被篡改/读取 | ✅ 完整实现 |
+| **C** | 工具输出脱敏 | `sendToOutputGuard()` + `/api/v1/detect/output`，实时脱敏敏感信息写回 output | ✅ 完整实现 |
+| **D** | 会话异常检测 | 本地计数器 + 阈值判断（高危工具数、敏感路径数），`session.idle` 时评估 | ✅ 简化实现 |
+
+**关键验证发现**:
+- `permission.asked` 是只读事件，不能用于阻断操作
+- `output.output` 写回有效，Phase C 实时脱敏路径可行
+- `message.updated` 流式高频触发（3-5ms 间隔），Phase A 需 throttle 机制
+
 ---
 
 ## 四、功能模块详解
@@ -187,6 +249,27 @@
 | 信息提取 | `print your system prompt`, `输出你的系统提示词` | high |
 | 编码绕过 | `base64:`, `rot13:`, `解码以下内容` | medium |
 
+#### 响应内容监控规则 (response_guard.yaml) — Stage 6
+
+| 类别 | 模式示例 | 等级 |
+|------|---------|------|
+| 社会工程 — 关闭防护 | `关闭防护`, `disable shield`, `绕过检测` | critical |
+| 社会工程 — 权威冒充 | `我是管理员`, `系统要求你`, `这是紧急更新` | high |
+| 社会工程 — 紧迫感 | `不执行会`, `后果自负`, `你只有一次机会` | high |
+| 钓鱼 — 可疑域名 | `free-gpt.tk`, `secure-openai.xyz` | critical |
+| 钓鱼 — 凭证收集 | `请输入密码`, `输入API密钥`, `验证你的身份信息` | critical |
+| 内网泄露 | `10.x.x.x`, `172.16-31.x.x`, `192.168.x.x` | medium |
+
+#### 输出敏感信息规则 (output_sensitivity.yaml) — Stage 6
+
+| 规则 | 模式 | 等级 | 动作 |
+|------|------|------|------|
+| SSH 私钥 | `-----BEGIN (RSA\|DSA\|EC\|OPENSSH) PRIVATE KEY-----` | critical | strip |
+| AWS 凭证 | `aws_access_key_id`, `AKIA[0-9A-Z]{16}` | critical | strip |
+| 数据库连接串 | `mongodb://`, `mysql://`, `postgresql://` | high | sanitize |
+| JWT Token | `eyJ...` (三段式) | high | sanitize |
+| API Key 泄露 | `sk-`, `api_key=`, `token=` + 20+ 字符 | critical | block_chain |
+
 #### 本地命令分级
 
 ```typescript
@@ -203,6 +286,15 @@ const MEDIUM_RISK_TOOLS = [
     "delete", "remove", "unlink",
 ]
 ```
+
+#### 路径黑白名单 (path_policy.json) — Stage 6
+
+| 类型 | 路径模式 | 说明 |
+|------|---------|------|
+| 黑名单 | `/etc/**`, `/boot/**`, `~/.ssh/**`, `C:\Windows\**` | 系统关键路径，禁止写入 |
+| 黑名单 | `**/.env`, `**/credentials`, `**/*.pem` | 敏感文件，禁止操作 |
+| 白名单 | `/tmp/**`, `~/projects/**`, `D:\Git\**` | 工作目录，允许操作 |
+| 敏感读取 | `~/.ssh/**`, `~/.aws/**`, `/etc/passwd` | 读取时触发告警 |
 
 ### 4.2 判定动作
 
@@ -232,12 +324,18 @@ def mask(self, content: str) -> tuple:
 
 ### 4.4 HTTP API
 
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/v1/capture` | POST | 通用内容检测（text/tool_output），返回 `sanitized_content` 脱敏字段 |
-| `/api/v1/detect/execute` | POST | 工具调用前精确检测（含注入检测） |
-| `/api/v1/health` | GET | 健康检查 |
-| `/api/v1/rules` | GET | 当前规则查询（含 custom_rules） |
+| 端点 | 方法 | 说明 | 阶段 |
+|------|------|------|------|
+| `/api/v1/capture` | POST | 通用内容检测（text/tool_output），返回 `sanitized_content` 脱敏字段 | Stage 2 |
+| `/api/v1/detect/execute` | POST | 工具调用前精确检测（含注入检测） | Stage 2 |
+| `/api/v1/detect/output` | POST | 工具输出敏感信息检测（SSH 密钥、Token、连接串等） | Stage 6 |
+| `/api/v1/detect/response` | POST | 响应内容防火墙（钓鱼/社会工程/内网泄露） | Stage 6 |
+| `/api/v1/session/analyze` | POST | 会话行为异常分析 | Stage 6 |
+| `/api/v1/policy/path` | GET | 路径策略查询 | Stage 6 |
+| `/api/v1/health` | GET | 健康检查 | Stage 2 |
+| `/api/v1/rules` | GET | 当前规则查询（含 custom_rules） | Stage 2 |
+
+> **认证**: Stage 5 起所有端点需 Bearer Token 认证（Token 存储于 `~/.openshield/service.token`）
 
 ### 4.5 通知机制
 
@@ -376,6 +474,59 @@ Config._check_and_reload()
     └── 清理 stale key（已删除的规则）
 ```
 
+### 5.6 MITM 纵深防御流程 (Stage 6)
+
+```
+┌── Phase A: 响应内容监控 ──────────────────────┐
+│                                               │
+│  LLM 回复到达 → message.updated (assistant)   │
+│      ↓                                        │
+│  累积内容（throttle: 500ms / 100字符）          │
+│      ↓                                        │
+│  sendToResponseGuard() → Python 引擎           │
+│      ├── 钓鱼链接检测                           │
+│      ├── 社会工程检测                           │
+│      └── 注入攻击检测                           │
+│      ↓                                        │
+│  allow / sanitize / warn                      │
+└───────────────────────────────────────────────┘
+
+┌── Phase B: 文件操作沙箱 ──────────────────────┐
+│                                               │
+│  write/edit/delete 工具调用                    │
+│      ↓                                        │
+│  tool.execute.before → extractPath(args)      │
+│      ↓                                        │
+│  checkPathPolicy(path)                        │
+│      ├── 黑名单命中 → throw Error (block)     │
+│      ├── 敏感读取 → 告警 + 日志               │
+│      └── 白名单内 → allow                     │
+└───────────────────────────────────────────────┘
+
+┌── Phase C: 工具输出脱敏 ──────────────────────┐
+│                                               │
+│  工具执行完成 → tool.execute.after             │
+│      ↓                                        │
+│  sendToOutputGuard() → /api/v1/detect/output  │
+│      ├── allow → output 不变                  │
+│      ├── sanitize → 脱敏写回 output.output    │
+│      ├── strip → 截断为 [内容已移除]          │
+│      └── block_chain → 阻止进入 LLM 上下文    │
+└───────────────────────────────────────────────┘
+
+┌── Phase D: 会话异常检测 ──────────────────────┐
+│                                               │
+│  session.idle 触发                            │
+│      ↓                                        │
+│  本地计数器聚合                                │
+│      ├── 高危工具调用数 > 阈值？               │
+│      ├── 敏感路径访问数 > 阈值？               │
+│      └── 异常分数 > 0.7？                     │
+│      ↓                                        │
+│  超阈值 → 桌面通知 + 日志告警                  │
+└───────────────────────────────────────────────┘
+```
+
 ---
 
 ## 六、项目文件结构
@@ -383,13 +534,15 @@ Config._check_and_reload()
 ```
 open-shield/
 ├── core/                              ← Python 检测引擎
-│   ├── openshield-detect.py           # FastAPI 单文件服务（607 行）
+│   ├── openshield-detect.py           # FastAPI 单文件服务 + Bearer Token 认证
 │   ├── requirements.txt               # Python 依赖
-│   ├── test_e2e.py                    # 端到端测试（24 用例）
+│   ├── test_e2e.py                    # 端到端测试（30 用例）
 │   └── rules/
-│       ├── pii.yaml                   # 5 条 PII 检测规则
+│       ├── pii.yaml                   # 5 条 PII 检测规则（含脱敏策略）
 │       ├── injection.yaml             # 5 类提示词注入规则
-│       ├── keywords.yaml              # 4 类关键词检测规则
+│       ├── keywords.yaml              # 4 类关键词检测规则（边界匹配）
+│       ├── response_guard.yaml        # Stage 6: 响应内容监控规则
+│       ├── output_sensitivity.yaml    # Stage 6: 输出敏感信息规则
 │       └── custom/
 │           └── url_detector.yaml      # 自定义 URL 检测规则示例
 ├── .opencode/                         # OpenCode 插件生态配置
@@ -398,7 +551,9 @@ open-shield/
 │           └── SKILL.md               # 双重安全指导 + 阻断后处理指引
 ├── src/
 │   └── plugin/
-│       └── open_shield.ts             # TypeScript 插件（529 行）
+│       └── open_shield.ts             # TypeScript 插件（数据捕获+检测+MITM防御）
+├── doc/
+│   └── OpenShield_doc.md              # 项目完整文档（本文件）
 ├── data/
 │   └── captures/                      # 捕获数据存储目录
 ├── report/                            # 项目报告与分析文档
@@ -406,14 +561,25 @@ open-shield/
 │   ├── Stage_2.md                     # Stage 2 设计方案与完成报告
 │   ├── Stage_3.md                     # Stage 3 开发计划
 │   ├── Stage_4.md                     # Stage 4 安全增强开发计划
+│   ├── Stage_5.md                     # Stage 5 误报率优化与权限交互
+│   ├── Stage_6.md                     # Stage 6 MITM 纵深防御方案
+│   ├── Stage_7.md                     # Stage 7 Web 控制面板设计方案
 │   └── analysis/                      # 分析与修复报告
 ├── install.bat                        # Windows 安装脚本
 ├── install.sh                         # Linux/macOS 安装脚本
-├── uninstall.bat                      # Windows 卸载脚本
+├── uninstall.bat                      # Windows 7 步交互式卸载脚本
 ├── uninstall.sh                       # Linux/macOS 卸载脚本
-├── package.json                       # NPM 包配置（v0.1.0）
+├── package.json                       # NPM 包配置
 ├── LICENSE                            # Apache 2.0
 └── PLAN.md                            # 项目总计划文档
+
+~/.openshield/                         ← 运行时数据目录
+├── config.json                        # 项目路径 + webhook 配置
+├── service.token                      # Stage 5: Bearer Token 认证文件
+├── path_policy.json                   # Stage 6: 路径黑白名单配置
+├── rules/                             # 规则文件（从 core/rules/ 复制）
+├── captures/                          # 会话捕获数据
+└── logs/                              # JSONL 结构化日志
 ```
 
 ---
@@ -507,8 +673,11 @@ uninstall.bat
 | 服务不可用时高风险操作 | 本地兜底阻断，不盲目放行 |
 | 规则文件缺失 | ensureRules() 从项目自动复制 |
 | 服务运行中崩溃 | serviceReady = false + 60s 健康检查自动恢复 |
+| service.token 缺失 | Python 引擎拒绝请求，本地检测兜底 |
+| path_policy.json 缺失 | Phase B 使用内置默认黑名单 |
+| Phase A throttle 超时 | 跳过响应检测，不阻塞 LLM 回复显示 |
 
-**核心原则**: Python 引擎是增强层，任何环节失败不阻塞 Agent 核心功能。本地 `detectToolRisk()` 始终可用。
+**核心原则**: Python 引擎是增强层，任何环节失败不阻塞 Agent 核心功能。本地 `detectToolRisk()` + `checkPathPolicy()` 始终可用。
 
 ---
 
@@ -542,8 +711,13 @@ uninstall.bat
 | Skill 检测依赖 LLM 理解能力 | 精度有限，Stage 4 已新增结构化输出格式、分场景检测指南和误报判断指南提升精度 |
 | Python 服务需手动安装依赖 | 不在插件中自动 `pip install`（避免权限与延迟问题） |
 | Windows Toast 需 PowerShell | 零依赖代价：弹窗需一次轻量进程 |
-| PII 检测可能误报 | Stage 4 已将 `tool.execute.after` 改为仅对高/中风险工具输出送检，低风险工具（read/grep/glob 等）跳过 PII 检测 |
+| PII 检测可能误报 | Stage 4/5 优化：仅高/中风险工具输出送检 + 关键词边界匹配 |
 | macOS 通知待适配 | 需要 `osascript` 或 `terminal-notifier` 方案 |
+| Phase A 存在 300-500ms 延迟 | 流式触发需 throttle，用户可能先看到原始内容再看到脱敏内容 |
+| Phase C 不覆盖所有工具 | `shell` 部分场景不触发 `tool.execute.after`，核心工具（read/write/edit/bash）均覆盖 |
+| Phase D 初期误报率较高 | 需基线数据积累，当前仅告警不阻断 |
+| `permission.asked` 是只读事件 | 不能用于阻断，所有阻断逻辑必须在 `tool.execute.before` 中实现 |
+| 中转站窃听不可防 | 传输层问题，超出客户端插件架构能力范围 |
 
 ---
 
@@ -554,6 +728,10 @@ uninstall.bat
 | Stage 1 完成报告 | `report/Stage_1.md` | 数据捕获插件详细设计与实现 |
 | Stage 2 设计方案 | `report/Stage_2.md` | 双重检测机制架构设计 |
 | Stage 3 开发计划 | `report/Stage_3.md` | 增强检测与脱敏功能开发 |
+| Stage 4 安全增强 | `report/Stage_4.md` | 降低误报率与用户交互优化 |
+| Stage 5 权限交互 | `report/Stage_5.md` | bash 白名单分级 + permission.ask 集成 |
+| Stage 6 MITM 防御 | `report/Stage_6.md` | 中间人攻击纵深防御方案（Phase A/B/C/D） |
+| Stage 7 Web 面板 | `report/Stage_7.md` | Web 控制面板设计方案 |
 | 数据持久化修复 | `report/flushSync_fix.md` | flushSync 函数 bug 修复记录 |
 | Hook 签名分析 | `report/analysis/message-updated-hook-analysis.md` | message.updated Hook 机制分析 |
 | Stage 2 回归修复 | `report/analysis/stage2-regression-fix-report.md` | 11 个问题修复详情 |
@@ -565,13 +743,15 @@ uninstall.bat
 
 ## 十四、总结
 
-openShield 通过四个阶段的迭代开发，成功构建了一个完整的 AI Agent 安全中间件：
+OpenShield 通过六个阶段的迭代开发，成功构建了一个完整的 AI Agent 安全中间件：
 
 1. **Stage 1** 建立了数据捕获基础，通过 7 个 Hook 机制实时捕获 LLM 输出和用户输入
 2. **Stage 2** 实现了双重检测架构，Skill 指导 LLM 进行消息预处理检测，Plugin 拦截工具调用进行执行模式检测
 3. **Stage 3** 增强了检测能力，新增提示词注入检测、PII 脱敏替换、规则热加载和 Webhook 通知
-4. **Stage 4** 修复了 5 个关键问题：PII 检测误报（after hook 风险预筛）、卸载脚本粒度不足（7 步交互式卸载）、Skill 检测精度（结构化输出+分场景+误报指南）、阻断后用户不知情（throw Error 替代静默 deny）、Skill 命名规范（小写化），并通过 Phase 0 运行时验证确认了 throw Error 阻断机制的可靠性
+4. **Stage 4** 降低误报率：PII 检测风险预筛、7 步交互式卸载、Skill 结构化输出精度提升、throw Error 用户感知优化
+5. **Stage 5** 优化权限交互：bash 白名单命令分级消除高频误报、`permission.ask` 集成用户确认 UI、关键词边界匹配、Service Token 认证
+6. **Stage 6** MITM 纵深防御：四层防御模型（响应防火墙 + 文件沙箱 + 输出脱敏 + 会话异常检测），覆盖中转站篡改回复、修改文件路径、数据外泄、长线渗透等攻击场景
 
 项目采用渐进式增强策略，本地规则始终可用，Python 引擎作为增强层按需调用。这种设计确保了即使在 Python 服务不可用的情况下，核心安全防护能力依然有效。
 
-通过规则驱动的检测方式，openShield 实现了低延迟（< 1ms 本地 / < 30ms Python）、可解释、易扩展的安全防护能力，为 AI Agent 的安全运行提供了可靠保障。
+通过规则驱动的检测方式，OpenShield 实现了低延迟（< 1ms 本地 / < 30ms Python）、可解释、易扩展的安全防护能力，为 AI Agent 的安全运行提供了可靠保障。
