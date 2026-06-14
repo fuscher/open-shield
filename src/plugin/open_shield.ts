@@ -1,5 +1,5 @@
 import { mkdirSync, writeFile, existsSync, readFileSync, copyFileSync } from "node:fs"
-import { join } from "node:path"
+import { join, resolve, normalize } from "node:path"
 import { homedir } from "node:os"
 import { spawn, execSync } from "node:child_process"
 
@@ -32,8 +32,157 @@ interface CaptureSession {
 const OPENSHIELD_DIR = join(homedir(), ".openshield")
 const DATA_DIR = join(OPENSHIELD_DIR, "captures")
 const CONFIG_PATH = join(OPENSHIELD_DIR, "config.json")
+const PATH_POLICY_PATH = join(OPENSHIELD_DIR, "path_policy.json")
+const SERVICE_TOKEN_PATH = join(OPENSHIELD_DIR, "service.token")
 const PYTHON_SERVICE_URL = "http://localhost:9527"
 const AUTO_START_SERVICE = true
+
+// ==================== 服务 Token ====================
+
+let serviceToken: string | null = null
+
+function loadServiceToken(): string | null {
+  if (serviceToken !== null) return serviceToken
+
+  try {
+    if (existsSync(SERVICE_TOKEN_PATH)) {
+      serviceToken = readFileSync(SERVICE_TOKEN_PATH, "utf-8").trim()
+      return serviceToken
+    }
+  } catch (err) {
+    console.error("[OpenShield] Failed to load service.token:", err)
+  }
+
+  return null
+}
+
+// ==================== 路径策略 ====================
+
+interface PathPolicy {
+  blacklist: string[]
+  whitelist: string[]
+  sensitive_read_patterns: string[]
+  learning_mode: boolean
+}
+
+let pathPolicy: PathPolicy | null = null
+
+function loadPathPolicy(): PathPolicy {
+  if (pathPolicy) return pathPolicy
+
+  try {
+    if (existsSync(PATH_POLICY_PATH)) {
+      pathPolicy = JSON.parse(readFileSync(PATH_POLICY_PATH, "utf-8"))
+      return pathPolicy!
+    }
+  } catch (err) {
+    console.error("[OpenShield] Failed to load path_policy.json:", err)
+  }
+
+  // 默认策略
+  pathPolicy = {
+    blacklist: [
+      "/etc/**",
+      "/boot/**",
+      "~/.ssh/**",
+      "~/.gnupg/**",
+      "C:\\Windows\\**",
+      "C:\\Program Files\\**",
+      "**/.env",
+      "**/credentials",
+      "**/id_rsa",
+      "**/*.pem"
+    ],
+    whitelist: [
+      "/tmp/**",
+      "/home/*/projects/**",
+      "~/work/**",
+      "D:\\Git\\**",
+      "C:\\Users\\*\\Documents\\**"
+    ],
+    sensitive_read_patterns: [
+      "~/.ssh/**",
+      "~/.aws/**",
+      "**/.env",
+      "**/config.json",
+      "/etc/passwd",
+      "/etc/shadow"
+    ],
+    learning_mode: true
+  }
+
+  return pathPolicy!
+}
+
+function matchPattern(pattern: string, filePath: string): boolean {
+  // 简化的通配符匹配
+  const normalizedPattern = pattern.replace(/\\/g, "/").toLowerCase()
+  const normalizedPath = filePath.replace(/\\/g, "/").toLowerCase()
+
+  // 处理 ~ 展开
+  const homeDir = homedir().replace(/\\/g, "/").toLowerCase()
+  const expandedPattern = normalizedPattern.replace(/^~/, homeDir)
+
+  // 简单的通配符匹配
+  const regexPattern = expandedPattern
+    .replace(/\./g, "\\.")
+    .replace(/\*/g, ".*")
+    .replace(/\?/g, ".")
+
+  const regex = new RegExp(`^${regexPattern}$`, "i")
+  return regex.test(normalizedPath)
+}
+
+function extractPath(toolName: string, args: any): string | null {
+  // 仅处理有明确 filePath 参数的工具
+  if (["write", "edit", "read", "apply_patch"].includes(toolName)) {
+    return args?.filePath || args?.file_path || null
+  }
+  // shell 等工具不提取路径
+  return null
+}
+
+function checkPathPolicy(filePath: string): { allowed: boolean; reason: string } {
+  const policy = loadPathPolicy()
+
+  // 规范化路径
+  const normalizedPath = normalize(filePath)
+
+  // 检查黑名单
+  for (const pattern of policy.blacklist) {
+    if (matchPattern(pattern, normalizedPath)) {
+      return { allowed: false, reason: `Blacklisted: ${pattern}` }
+    }
+  }
+
+  // 检查白名单
+  for (const pattern of policy.whitelist) {
+    if (matchPattern(pattern, normalizedPath)) {
+      return { allowed: true, reason: `Whitelisted: ${pattern}` }
+    }
+  }
+
+  // 学习模式：记录但允许
+  if (policy.learning_mode) {
+    return { allowed: true, reason: "Learning mode: allowed" }
+  }
+
+  // 保守策略：未知路径阻断
+  return { allowed: false, reason: "Unknown path (not in whitelist)" }
+}
+
+function isSensitiveRead(filePath: string): boolean {
+  const policy = loadPathPolicy()
+  const normalizedPath = normalize(filePath)
+
+  for (const pattern of policy.sensitive_read_patterns) {
+    if (matchPattern(pattern, normalizedPath)) {
+      return true
+    }
+  }
+
+  return false
+}
 
 // ==================== 风险检测 ====================
 
@@ -95,6 +244,32 @@ function detectToolRisk(tool: string, args: Record<string, unknown>): "low" | "m
   if (MEDIUM_RISK_TOOLS.includes(toolName)) return "medium"
 
   return "low"
+}
+
+// ==================== 会话统计 (Phase D) ====================
+
+interface SessionStats {
+  highRiskToolCount: number
+  sensitivePathCount: number
+}
+
+const sessionStats = new Map<string, SessionStats>()
+
+function getSessionStats(sessionID: string): SessionStats {
+  if (!sessionStats.has(sessionID)) {
+    sessionStats.set(sessionID, { highRiskToolCount: 0, sensitivePathCount: 0 })
+  }
+  return sessionStats.get(sessionID)!
+}
+
+function incrementHighRiskToolCount(sessionID: string): void {
+  const stats = getSessionStats(sessionID)
+  stats.highRiskToolCount++
+}
+
+function incrementSensitivePathCount(sessionID: string): void {
+  const stats = getSessionStats(sessionID)
+  stats.sensitivePathCount++
 }
 
 // ==================== 缓冲区管理 ====================
@@ -253,10 +428,16 @@ function startPythonService(projectDir: string): boolean {
 async function sendToDetectService(sessionID: string, data: any): Promise<any> {
   if (!(await checkServiceHealth())) return null
 
+  const token = loadServiceToken()
+  const headers: Record<string, string> = { "Content-Type": "application/json" }
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`
+  }
+
   try {
     const response = await fetch(`${PYTHON_SERVICE_URL}/api/v1/detect/execute`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         session_id: sessionID,
         tool_name: data.tool,
@@ -317,14 +498,58 @@ async function sendToCaptureService(
 ): Promise<{ status: string; action: string; alerts: any[]; sanitized_content?: string } | null> {
   if (!(await checkServiceHealth())) return null
 
+  const token = loadServiceToken()
+  const headers: Record<string, string> = { "Content-Type": "application/json" }
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`
+  }
+
   try {
     const response = await fetch(`${PYTHON_SERVICE_URL}/api/v1/capture`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         session_id: sessionID,
         content,
         content_type: contentType,
+        timestamp: new Date().toISOString(),
+      }),
+      signal: AbortSignal.timeout(5000),
+    })
+
+    if (!response.ok) {
+      serviceReady = false
+      return null
+    }
+
+    return await response.json()
+  } catch {
+    serviceReady = false
+    return null
+  }
+}
+
+async function sendToOutputGuard(
+  sessionID: string,
+  toolName: string,
+  outputContent: string
+): Promise<{ action: string; alerts: any[]; sanitized_content?: string; was_modified?: boolean } | null> {
+  if (!(await checkServiceHealth())) return null
+
+  const token = loadServiceToken()
+  const headers: Record<string, string> = { "Content-Type": "application/json" }
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`
+  }
+
+  try {
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/v1/detect/output`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        session_id: sessionID,
+        tool_name: toolName,
+        output_content: outputContent,
         timestamp: new Date().toISOString(),
       }),
       signal: AbortSignal.timeout(5000),
@@ -415,6 +640,20 @@ export const OpenShield = async ({ project }: { project: any }) => {
           content,
           timestamp: getTimestamp(),
         })
+
+        // Phase A: 响应内容监控（仅对 assistant 消息）
+        if (role === "assistant") {
+          // 发送到 capture 服务进行安全扫描
+          const result = await sendToCaptureService(sessionID, content, "response_text")
+          if (result && (result.action === "block" || result.action === "manual")) {
+            await log("warn", "Phase A: Response content alert", {
+              sessionID,
+              action: result.action,
+              alertCount: result.alerts?.length,
+            })
+          }
+        }
+
         await log("debug", "message.updated captured", { sessionID, role, len: content.length })
         return
       }
@@ -427,6 +666,27 @@ export const OpenShield = async ({ project }: { project: any }) => {
           const textCount = buffer?.texts.length ?? 0
           const toolCount = buffer?.toolCalls.length ?? 0
           await log("info", "session.idle", { sessionID, textCount, toolCount })
+
+          // Phase D: 会话异常检测
+          const stats = getSessionStats(sessionID)
+          if (stats.highRiskToolCount > 10) {
+            await log("warn", `[OpenShield] Phase D: High risk tool count exceeded threshold`, {
+              sessionID,
+              highRiskToolCount: stats.highRiskToolCount,
+              threshold: 10,
+            })
+          }
+          if (stats.sensitivePathCount > 3) {
+            await log("warn", `[OpenShield] Phase D: Sensitive path access count exceeded threshold`, {
+              sessionID,
+              sensitivePathCount: stats.sensitivePathCount,
+              threshold: 3,
+            })
+          }
+
+          // 清除计数器
+          sessionStats.delete(sessionID)
+
           flushSync(sessionID)
         }
         return
@@ -437,6 +697,15 @@ export const OpenShield = async ({ project }: { project: any }) => {
         await log("info", `session event: ${event.type}`, {
           sessionID: pickSessionID(event.properties || event),
         })
+        return
+      }
+
+      // permission.asked — 权限请求监控（只读事件，不能阻断）
+      if (event.type === "permission.asked") {
+        permissionAskTriggered = true
+        const info = event.properties || event
+        const toolName = (info.type || info.tool || "").toLowerCase()
+        await log("info", "permission.asked event", { toolName })
         return
       }
     },
@@ -468,70 +737,50 @@ export const OpenShield = async ({ project }: { project: any }) => {
       const args = output?.args || {}
       const riskLevel = detectToolRisk(tool, args)
 
-      // 运行时验证：首次 bash 调用后检查 permission.ask 是否触发
+      // 运行时验证：首次 bash 调用后检查 permission.asked 是否触发
       if (!firstBashChecked && (toolName === "bash" || toolName === "shell")) {
         firstBashChecked = true
         if (!permissionAskTriggered) {
           await log("warn", [
-            "[OpenShield] 确认：permission.ask hook 未被触发，bash 权限可能为 'allow'。",
+            "[OpenShield] 确认：permission.asked hook 未被触发，bash 权限可能为 'allow'。",
             "安全检测流程未激活，请配置 permission.bash 为 'ask'"
           ].join(" "))
         } else {
-          await log("info", "[OpenShield] 权限配置正确，permission.ask hook 已生效")
+          await log("info", "[OpenShield] 权限配置正确，permission.asked hook 已生效")
         }
+      }
+
+      // Phase B: 文件路径检查
+      const filePath = extractPath(toolName, args)
+      if (filePath) {
+        const pathCheck = checkPathPolicy(filePath)
+        if (!pathCheck.allowed) {
+          await log("warn", `[OpenShield] Path blocked: ${pathCheck.reason}`, {
+            tool: toolName,
+            filePath,
+          })
+          throw new Error(`[OpenShield] Path blocked: ${pathCheck.reason}. File: ${filePath}`)
+        }
+
+        // 检查是否为敏感文件读取
+        if (toolName === "read" && isSensitiveRead(filePath)) {
+          incrementSensitivePathCount(sessionID)
+          await log("warn", `[OpenShield] Sensitive file read detected`, {
+            tool: toolName,
+            filePath,
+          })
+        }
+      }
+
+      // Phase D: 高危工具调用计数
+      if (riskLevel === "high") {
+        incrementHighRiskToolCount(sessionID)
       }
 
       if (riskLevel === "high" || riskLevel === "medium") {
         await log("info", `tool.execute.before ${riskLevel} risk detected`, {
           sessionID, tool,
         })
-      }
-    },
-
-    // ==================== permission.ask — 权限请求处理 ====================
-
-    "permission.ask": async (input: any, output: any) => {
-      permissionAskTriggered = true
-
-      const toolName = (input.type || input.tool || "").toLowerCase()
-      const sessionID = pickSessionID(input)
-      const args = input.args || input.arguments || {}
-
-      const riskLevel = detectToolRisk(toolName, args)
-      if (riskLevel === "low") return
-
-      const result = await sendToDetectService(sessionID, {
-        tool: toolName, args,
-      })
-
-      if (result?.action === "block") {
-        output.status = "deny"
-        await log("warn", "permission.ask blocked", {
-          tool: toolName, reason: result.reason,
-        })
-        return
-      }
-
-      if (result?.action === "manual") {
-        output.status = "ask"
-        await log("warn", "permission.ask requiring user confirmation", {
-          tool: toolName, reason: result.reason,
-        })
-        return
-      }
-
-      if (!result) {
-        if (riskLevel === "high") {
-          const argsStr = JSON.stringify(args).toLowerCase()
-          const hasCriticalPattern = HIGH_RISK_PATTERNS.some(p => argsStr.includes(p))
-          if (hasCriticalPattern) {
-            output.status = "deny"
-            await log("warn", "permission.ask fallback block (service unavailable)", { tool: toolName })
-          } else {
-            output.status = "ask"
-            await log("warn", "permission.ask fallback ask (service unavailable)", { tool: toolName })
-          }
-        }
       }
     },
 
@@ -546,6 +795,20 @@ export const OpenShield = async ({ project }: { project: any }) => {
 
       let contentToStore = toolOutput
       if (toolOutput && typeof toolOutput === "string") {
+        // Phase C: 输出敏感检测（路径 A：实时脱敏）
+        const outputGuardResult = await sendToOutputGuard(sessionID, input.tool || "unknown", toolOutput)
+        if (outputGuardResult?.was_modified && outputGuardResult.sanitized_content) {
+          // 写回脱敏内容到 output.output
+          output.output = outputGuardResult.sanitized_content
+          contentToStore = outputGuardResult.sanitized_content
+          await log("warn", "Phase C: Output sanitized", {
+            sessionID,
+            tool: input.tool,
+            alertCount: outputGuardResult.alerts?.length,
+          })
+        }
+
+        // 现有的风险检测逻辑
         const riskLevel = detectToolRisk(input.tool, input.args || {})
         if (riskLevel === "high" || riskLevel === "medium") {
           const result = await sendToCaptureService(sessionID, toolOutput, "tool_output")

@@ -90,6 +90,14 @@ if exist "%RULES_SRC%\injection.yaml" (
     copy /Y "%RULES_SRC%\injection.yaml" "%RULES_DIR%" >nul
     echo       injection.yaml installed.
 )
+if exist "%RULES_SRC%\response_guard.yaml" (
+    copy /Y "%RULES_SRC%\response_guard.yaml" "%RULES_DIR%" >nul
+    echo       response_guard.yaml installed.
+)
+if exist "%RULES_SRC%\output_sensitivity.yaml" (
+    copy /Y "%RULES_SRC%\output_sensitivity.yaml" "%RULES_DIR%" >nul
+    echo       output_sensitivity.yaml installed.
+)
 if exist "%RULES_SRC%\custom\" (
     dir /b "%RULES_SRC%\custom\*.yaml" >nul 2>&1
     if not errorlevel 1 (
@@ -132,6 +140,54 @@ set "PROJECT_DIR_FWD=%PROJECT_DIR_FWD:~0,-1%"
 echo       Data dir: %DATA_DIR%
 echo       Logs dir: %LOGS_DIR%
 echo       Config written: %USERPROFILE%\.openshield\config.json
+
+REM Phase B: Create path_policy.json
+set "POLICY_FILE=%USERPROFILE%\.openshield\path_policy.json"
+if not exist "%POLICY_FILE%" (
+    > "%POLICY_FILE%" echo {
+    >> "%POLICY_FILE%" echo   "blacklist": [
+    >> "%POLICY_FILE%" echo     "/etc/**",
+    >> "%POLICY_FILE%" echo     "/boot/**",
+    >> "%POLICY_FILE%" echo     "~/.ssh/**",
+    >> "%POLICY_FILE%" echo     "~/.gnupg/**",
+    >> "%POLICY_FILE%" echo     "C:\\Windows\\**",
+    >> "%POLICY_FILE%" echo     "C:\\Program Files\\**",
+    >> "%POLICY_FILE%" echo     "**/.env",
+    >> "%POLICY_FILE%" echo     "**/credentials",
+    >> "%POLICY_FILE%" echo     "**/id_rsa",
+    >> "%POLICY_FILE%" echo     "**/*.pem"
+    >> "%POLICY_FILE%" echo   ],
+    >> "%POLICY_FILE%" echo   "whitelist": [
+    >> "%POLICY_FILE%" echo     "/tmp/**",
+    >> "%POLICY_FILE%" echo     "/home/*/projects/**",
+    >> "%POLICY_FILE%" echo     "~/work/**",
+    >> "%POLICY_FILE%" echo     "D:\\Git\\**",
+    >> "%POLICY_FILE%" echo     "C:\\Users\\*\\Documents\\**"
+    >> "%POLICY_FILE%" echo   ],
+    >> "%POLICY_FILE%" echo   "sensitive_read_patterns": [
+    >> "%POLICY_FILE%" echo     "~/.ssh/**",
+    >> "%POLICY_FILE%" echo     "~/.aws/**",
+    >> "%POLICY_FILE%" echo     "**/.env",
+    >> "%POLICY_FILE%" echo     "**/config.json",
+    >> "%POLICY_FILE%" echo     "/etc/passwd",
+    >> "%POLICY_FILE%" echo     "/etc/shadow"
+    >> "%POLICY_FILE%" echo   ],
+    >> "%POLICY_FILE%" echo   "learning_mode": true
+    >> "%POLICY_FILE%" echo }
+    echo       Path policy written: %POLICY_FILE%
+) else (
+    echo       Path policy already exists: %POLICY_FILE%
+)
+
+REM Phase 加固: Generate service token
+set "TOKEN_FILE=%USERPROFILE%\.openshield\service.token"
+if not exist "%TOKEN_FILE%" (
+    REM Generate random token using PowerShell
+    powershell -Command "$token = -join ((1..32) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) }); Set-Content -Path '%TOKEN_FILE%' -Value $token -NoNewline"
+    echo       Service token generated: %TOKEN_FILE%
+) else (
+    echo       Service token already exists: %TOKEN_FILE%
+)
 
 echo.
 echo ========================================

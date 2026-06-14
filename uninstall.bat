@@ -51,6 +51,26 @@ if exist "%DATA_DIR%\config.json" (
     echo       Config not found, skipping.
 )
 
+echo [3.5/7] Removing security files...
+if exist "%DATA_DIR%\path_policy.json" (
+    del /f /q "%DATA_DIR%\path_policy.json"
+    echo       Removed: path_policy.json
+) else (
+    echo       path_policy.json not found, skipping.
+)
+if exist "%DATA_DIR%\service.token" (
+    del /f /q "%DATA_DIR%\service.token"
+    echo       Removed: service.token
+) else (
+    echo       service.token not found, skipping.
+)
+if exist "%DATA_DIR%\config.json.backup" (
+    del /f /q "%DATA_DIR%\config.json.backup"
+    echo       Removed: config.json.backup
+) else (
+    echo       config.json.backup not found, skipping.
+)
+
 echo [4/7] Cleaning up detection rules...
 echo.
 set /p "DELETE_RULES=Do you want to delete detection rules? (y/N): "

@@ -77,6 +77,14 @@ if [ -f "$RULES_SRC/injection.yaml" ]; then
     cp "$RULES_SRC/injection.yaml" "$RULES_DIR/"
     echo "      injection.yaml installed."
 fi
+if [ -f "$RULES_SRC/response_guard.yaml" ]; then
+    cp "$RULES_SRC/response_guard.yaml" "$RULES_DIR/"
+    echo "      response_guard.yaml installed."
+fi
+if [ -f "$RULES_SRC/output_sensitivity.yaml" ]; then
+    cp "$RULES_SRC/output_sensitivity.yaml" "$RULES_DIR/"
+    echo "      output_sensitivity.yaml installed."
+fi
 if [ -n "$(find "$RULES_SRC/custom" -maxdepth 1 -name "*.yaml" 2>/dev/null)" ]; then
     cp "$RULES_SRC/custom/"*.yaml "$RULES_DIR/custom/"
     echo "      custom rules installed."
@@ -114,6 +122,60 @@ printf '{"project_dir":"%s","webhooks":[]}\n' "$SCRIPT_DIR" > "$CONFIG_FILE"
 echo "      Data dir: $DATA_DIR"
 echo "      Logs dir: $LOGS_DIR"
 echo "      Config written: $HOME/.openshield/config.json"
+
+# Phase B: Create path_policy.json
+POLICY_FILE="$HOME/.openshield/path_policy.json"
+if [ ! -f "$POLICY_FILE" ]; then
+    cat > "$POLICY_FILE" << 'EOF'
+{
+  "blacklist": [
+    "/etc/**",
+    "/boot/**",
+    "~/.ssh/**",
+    "~/.gnupg/**",
+    "C:\\Windows\\**",
+    "C:\\Program Files\\**",
+    "**/.env",
+    "**/credentials",
+    "**/id_rsa",
+    "**/*.pem"
+  ],
+  "whitelist": [
+    "/tmp/**",
+    "/home/*/projects/**",
+    "~/work/**",
+    "D:\\Git\\**",
+    "C:\\Users\\*\\Documents\\**"
+  ],
+  "sensitive_read_patterns": [
+    "~/.ssh/**",
+    "~/.aws/**",
+    "**/.env",
+    "**/config.json",
+    "/etc/passwd",
+    "/etc/shadow"
+  ],
+  "learning_mode": true
+}
+EOF
+    echo "      Path policy written: $POLICY_FILE"
+else
+    echo "      Path policy already exists: $POLICY_FILE"
+fi
+
+# Phase 加固: Generate service token
+TOKEN_FILE="$HOME/.openshield/service.token"
+if [ ! -f "$TOKEN_FILE" ]; then
+    # Generate random token using openssl or /dev/urandom
+    if command -v openssl >/dev/null 2>&1; then
+        openssl rand -hex 32 > "$TOKEN_FILE"
+    else
+        head -c 32 /dev/urandom | xxd -p > "$TOKEN_FILE"
+    fi
+    echo "      Service token generated: $TOKEN_FILE"
+else
+    echo "      Service token already exists: $TOKEN_FILE"
+fi
 
 echo ""
 echo "========================================"

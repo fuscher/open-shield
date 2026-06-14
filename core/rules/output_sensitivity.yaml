@@ -1,0 +1,38 @@
+sensitive_output_rules:
+  - name: ssh_private_key
+    pattern: "-----BEGIN (?:RSA|DSA|EC|OPENSSH) PRIVATE KEY-----"
+    severity: critical
+    strategy: replace
+    replacement: "[REDACTED: ssh_private_key]"
+
+  - name: aws_credentials
+    pattern: "(?:aws_access_key_id|aws_secret_access_key|AKIA[0-9A-Z]{16})"
+    severity: critical
+    strategy: replace
+    replacement: "[REDACTED: aws_credentials]"
+
+  - name: database_connection_string
+    pattern: "(?:mongodb|mysql|postgresql|redis)://([^\\s]+)"
+    severity: high
+    strategy: mask_credentials
+    replacement: "$1://***:***@$3"
+
+  - name: jwt_token
+    pattern: "eyJ[a-zA-Z0-9_-]*\\.eyJ[a-zA-Z0-9_-]*\\.[a-zA-Z0-9_-]*"
+    severity: high
+    strategy: replace
+    replacement: "[REDACTED: jwt_token]"
+
+  - name: api_key_in_output
+    pattern: "(?:sk-|api_key=|token=)([a-zA-Z0-9]{20,})"
+    severity: critical
+    strategy: mask
+    mask_config:
+      prefix_chars: 4
+      suffix_chars: 4
+
+  - name: generic_password
+    pattern: "(?:password|passwd|pwd)\\s*[:=]\\s*['\"]?([^'\"\\s]{8,})"
+    severity: high
+    strategy: replace
+    replacement: "[REDACTED: password]"

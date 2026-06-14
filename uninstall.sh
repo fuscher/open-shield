@@ -47,6 +47,26 @@ else
     echo "      Config not found, skipping."
 fi
 
+echo "[3.5/7] Removing security files..."
+if [ -f "$DATA_DIR/path_policy.json" ]; then
+    rm -f "$DATA_DIR/path_policy.json"
+    echo "      Removed: path_policy.json"
+else
+    echo "      path_policy.json not found, skipping."
+fi
+if [ -f "$DATA_DIR/service.token" ]; then
+    rm -f "$DATA_DIR/service.token"
+    echo "      Removed: service.token"
+else
+    echo "      service.token not found, skipping."
+fi
+for backup in "$DATA_DIR"/config.json.backup*; do
+    if [ -f "$backup" ]; then
+        rm -f "$backup"
+        echo "      Removed: $(basename "$backup")"
+    fi
+done
+
 echo "[4/7] Cleaning up detection rules..."
 echo ""
 read -p "Do you want to delete detection rules? (y/N): " DELETE_RULES

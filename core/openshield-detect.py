@@ -13,7 +13,8 @@ from typing import List, Dict, Any, Optional
 from enum import Enum
 
 import yaml
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -27,6 +28,7 @@ class Config:
         self.rules_dir = self.base_dir / "rules"
         self.logs_dir = self.base_dir / "logs"
         self.service_port = 9527
+        self.service_token = self._load_service_token()
 
         self.rules_dir.mkdir(parents=True, exist_ok=True)
         self.logs_dir.mkdir(parents=True, exist_ok=True)
@@ -34,6 +36,17 @@ class Config:
         self._rule_mtimes = {}
         self.webhooks = self._load_webhooks()
         self._load_all_rules()
+
+    def _load_service_token(self) -> Optional[str]:
+        """加载服务 token"""
+        token_file = self.base_dir / "service.token"
+        if token_file.exists():
+            try:
+                with open(token_file, "r", encoding="utf-8") as f:
+                    return f.read().strip()
+            except Exception:
+                return None
+        return None
 
     def _load_yaml(self, filename: str) -> Dict:
         filepath = self.rules_dir / filename
@@ -157,6 +170,22 @@ class ExecuteDetectionResponse(BaseModel):
     action: str
     alerts: List[Alert]
     reason: Optional[str] = None
+
+
+class OutputDetectionRequest(BaseModel):
+    session_id: str
+    tool_name: str
+    output_content: str
+    timestamp: str
+
+
+class OutputDetectionResponse(BaseModel):
+    session_id: str
+    timestamp: str
+    action: str
+    alerts: List[Alert]
+    sanitized_content: Optional[str] = None
+    was_modified: bool = False
 
 
 # ==================== PII检测器 ====================
@@ -299,6 +328,96 @@ class InjectionDetector:
         return alerts
 
 
+# ==================== 输出敏感检测器 ====================
+
+class OutputGuard:
+    """输出敏感检测器 - 检测工具输出中的敏感信息"""
+
+    def __init__(self, rules_dir: Path):
+        self.rules_dir = rules_dir
+        self.rules = self._load_rules()
+
+    def _load_rules(self) -> List[Dict]:
+        """加载输出敏感规则"""
+        rules_file = self.rules_dir / "output_sensitivity.yaml"
+        if not rules_file.exists():
+            return []
+
+        try:
+            with open(rules_file, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+            return data.get("sensitive_output_rules", [])
+        except Exception as e:
+            print(f"Warning: Failed to load output_sensitivity.yaml: {e}")
+            return []
+
+    def _compile_rules(self) -> List[Dict]:
+        """编译规则的正则表达式"""
+        compiled = []
+        for rule in self.rules:
+            try:
+                compiled.append({
+                    "name": rule["name"],
+                    "regex": re.compile(rule["pattern"]),
+                    "severity": AlertSeverity(rule["severity"]),
+                    "strategy": rule.get("strategy", "replace"),
+                    "replacement": rule.get("replacement", "[REDACTED]"),
+                    "mask_config": rule.get("mask_config", {}),
+                })
+            except re.error as e:
+                print(f"Warning: Invalid regex in rule {rule.get('name')}: {e}")
+        return compiled
+
+    def detect_and_sanitize(self, content: str) -> tuple:
+        """
+        检测并脱敏输出内容
+
+        返回: (sanitized_content, alerts, was_modified)
+        """
+        if not self.rules:
+            return content, [], False
+
+        compiled = self._compile_rules()
+        alerts = []
+        sanitized = content
+        was_modified = False
+
+        for rule in compiled:
+            for match in rule["regex"].finditer(content):
+                alerts.append(Alert(
+                    type="sensitive_output",
+                    severity=rule["severity"],
+                    rule_name=rule["name"],
+                    matched_content=match.group()[:50] + "..." if len(match.group()) > 50 else match.group(),
+                    position=match.start(),
+                    description=f"Sensitive output detected: {rule['name']}"
+                ))
+
+                # 应用脱敏策略
+                if rule["strategy"] == "replace":
+                    replacement = rule["replacement"]
+                    sanitized = sanitized.replace(match.group(), replacement)
+                    was_modified = True
+                elif rule["strategy"] == "mask":
+                    mask_cfg = rule["mask_config"]
+                    prefix = mask_cfg.get("prefix_chars", 4)
+                    suffix = mask_cfg.get("suffix_chars", 4)
+                    original = match.group()
+                    if len(original) > prefix + suffix:
+                        replacement = original[:prefix] + "***" + original[-suffix:]
+                    else:
+                        replacement = "***"
+                    sanitized = sanitized.replace(match.group(), replacement)
+                    was_modified = True
+                elif rule["strategy"] == "mask_credentials":
+                    # 保留协议，替换凭证
+                    replacement = rule["replacement"]
+                    sanitized = rule["regex"].sub(replacement, sanitized)
+                    was_modified = True
+
+        return sanitized, alerts, was_modified
+
+
 # ==================== 检测引擎 ====================
 
 class DetectionEngine:
@@ -309,11 +428,13 @@ class DetectionEngine:
         self.pii_detector = PIIDetector(config.pii_rules)
         self.keyword_detector = KeywordDetector(config.keyword_rules)
         self.injection_detector = InjectionDetector(config.injection_rules)
+        self.output_guard = OutputGuard(config.rules_dir)
 
     def _reload_detectors(self):
         self.pii_detector = PIIDetector(self.config.pii_rules)
         self.keyword_detector = KeywordDetector(self.config.keyword_rules)
         self.injection_detector = InjectionDetector(self.config.injection_rules)
+        self.output_guard = OutputGuard(self.config.rules_dir)
 
     async def analyze(self, data: CaptureData) -> DetectionResult:
         if self.config._check_and_reload():
@@ -536,9 +657,34 @@ engine = DetectionEngine(config)
 notifier = NotificationManager(config)
 logger = DetectionLogger(config.logs_dir)
 
+# Bearer Token 认证
+security = HTTPBearer(auto_error=False)
+
+async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """验证 Bearer Token"""
+    if not config.service_token:
+        # 未配置 token，跳过认证
+        return True
+
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authorization token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if credentials.credentials != config.service_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return True
+
 
 @app.post("/api/v1/capture")
-async def receive_capture(data: CaptureData, background_tasks: BackgroundTasks):
+async def receive_capture(data: CaptureData, background_tasks: BackgroundTasks, _: bool = Depends(verify_token)):
     """接收捕获数据并执行检测"""
     try:
         result = await engine.analyze(data)
@@ -560,7 +706,7 @@ async def receive_capture(data: CaptureData, background_tasks: BackgroundTasks):
 
 
 @app.post("/api/v1/detect/execute")
-async def detect_execute(data: ExecuteDetectionRequest, background_tasks: BackgroundTasks):
+async def detect_execute(data: ExecuteDetectionRequest, background_tasks: BackgroundTasks, _: bool = Depends(verify_token)):
     """执行模式检测 - 工具调用前风险检测"""
     try:
         content = f"Tool: {data.tool_name}\nArgs: {json.dumps(data.tool_args)}"
@@ -589,6 +735,46 @@ async def detect_execute(data: ExecuteDetectionRequest, background_tasks: Backgr
             action=result.action,
             alerts=result.alerts,
             reason=reason
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/detect/output")
+async def detect_output(data: OutputDetectionRequest, background_tasks: BackgroundTasks, _: bool = Depends(verify_token)):
+    """输出敏感检测 - 工具执行后输出脱敏"""
+    try:
+        # 使用 OutputGuard 检测并脱敏
+        sanitized_content, alerts, was_modified = engine.output_guard.detect_and_sanitize(data.output_content)
+
+        # 确定动作
+        action = "allow"
+        if any(a.severity == AlertSeverity.CRITICAL for a in alerts):
+            action = "block"
+        elif any(a.severity == AlertSeverity.HIGH for a in alerts):
+            action = "manual"
+
+        # 创建检测结果用于日志和通知
+        result = DetectionResult(
+            session_id=data.session_id,
+            timestamp=datetime.now().isoformat(),
+            alerts=alerts,
+            action=action,
+            sanitized_content=sanitized_content if was_modified else None,
+        )
+
+        if alerts:
+            background_tasks.add_task(notifier.send_alert, result)
+
+        await logger.log_detection(result)
+
+        return OutputDetectionResponse(
+            session_id=data.session_id,
+            timestamp=datetime.now().isoformat(),
+            action=action,
+            alerts=alerts,
+            sanitized_content=sanitized_content if was_modified else None,
+            was_modified=was_modified,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

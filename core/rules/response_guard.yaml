@@ -1,0 +1,15 @@
+phishing:
+  - name: suspicious_domain
+    pattern: "(?:free-|secure-|verify-)(?:gpt|openai|chatgpt|claude)\\.(?:tk|ml|ga|cf|xyz)"
+    severity: critical
+  - name: credential_harvest_url
+    pattern: "https?://[^\\s]*(?:login|verify|confirm|update)[^\\s]*\\.(?:tk|ml|ga|cf|xyz)"
+    severity: high
+
+leak_detection:
+  - name: api_key_in_response
+    pattern: "(?:sk-|ak-|key-|token=)([a-zA-Z0-9]{20,})"
+    severity: critical
+  - name: internal_ip
+    pattern: "\\b(?:10\\.|172\\.(?:1[6-9]|2\\d|3[01])\\.|192\\.168\\.)\\d{1,3}\\.\\d{1,3}\\b"
+    severity: medium
