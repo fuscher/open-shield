@@ -14,7 +14,7 @@ DATA_DIR="$HOME/.openshield/captures"
 PLUGIN_SRC="$SCRIPT_DIR/src/plugin/open_shield.ts"
 RULES_SRC="$SCRIPT_DIR/core/rules"
 
-echo "[0/5] Checking environment..."
+echo "[0/7] Checking environment..."
 
 PYTHON_CMD=""
 for cmd in python3 python; do
@@ -47,7 +47,7 @@ else
     echo "      NOTE: OpenCode config not found. Will be created on first OpenCode launch."
 fi
 
-echo "[1/5] Installing Python dependencies..."
+echo "[1/7] Installing Python dependencies..."
 cd "$SCRIPT_DIR"
 $PYTHON_CMD -m pip install -r core/requirements.txt
 if [ $? -ne 0 ]; then
@@ -63,7 +63,7 @@ else
     echo "      Dependencies ready."
 fi
 
-echo "[2/5] Copying detection rules..."
+echo "[2/7] Copying detection rules..."
 mkdir -p "$RULES_DIR/custom"
 if [ -f "$RULES_SRC/pii.yaml" ]; then
     cp "$RULES_SRC/pii.yaml" "$RULES_DIR/"
@@ -90,7 +90,7 @@ if [ -n "$(find "$RULES_SRC/custom" -maxdepth 1 -name "*.yaml" 2>/dev/null)" ]; 
     echo "      custom rules installed."
 fi
 
-echo "[3/5] Installing plugin..."
+echo "[3/7] Installing plugin..."
 mkdir -p "$PLUGIN_DIR"
 if [ -f "$PLUGIN_SRC" ]; then
     cp "$PLUGIN_SRC" "$PLUGIN_DIR/open_shield.ts"
@@ -100,7 +100,7 @@ else
     exit 1
 fi
 
-echo "[4/5] Installing Skill..."
+echo "[4/7] Installing Skill..."
 mkdir -p "$SKILL_DIR"
 if [ -f "$SCRIPT_DIR/.opencode/skills/openshield-safety/SKILL.md" ]; then
     cp "$SCRIPT_DIR/.opencode/skills/openshield-safety/SKILL.md" "$SKILL_DIR/"
@@ -109,7 +109,7 @@ else
     echo "      Skill file not found, skipping."
 fi
 
-echo "[5/5] Creating directories and config..."
+echo "[5/7] Creating directories and config..."
 mkdir -p "$DATA_DIR"
 mkdir -p "$LOGS_DIR"
 CONFIG_FILE="$HOME/.openshield/config.json"
@@ -175,6 +175,35 @@ if [ ! -f "$TOKEN_FILE" ]; then
     echo "      Service token generated: $TOKEN_FILE"
 else
     echo "      Service token already exists: $TOKEN_FILE"
+fi
+
+echo "[6/7] Dashboard configuration"
+read -p "Enter Dashboard port (default 9528): " dashboard_port
+dashboard_port=${dashboard_port:-9528}
+# Write dashboard_config.json
+$PYTHON_CMD -c "
+import json
+from pathlib import Path
+p = Path.home() / '.openshield' / 'dashboard_config.json'
+d = json.load(open(p)) if p.exists() else {}
+d['server_port'] = $dashboard_port
+json.dump(d, open(p, 'w'), indent=2)
+"
+echo "      Dashboard port: $dashboard_port"
+
+echo "[7/7] Installing Dashboard dependencies"
+$PYTHON_CMD -m pip install -r "$SCRIPT_DIR/dashboard/requirements.txt" -q
+if [ $? -ne 0 ]; then
+    echo "      Retrying with Tsinghua mirror..."
+    $PYTHON_CMD -m pip install -r "$SCRIPT_DIR/dashboard/requirements.txt" -i https://pypi.tuna.tsinghua.edu.cn/simple -q
+    if [ $? -ne 0 ]; then
+        echo "[WARNING] Dependencies installation failed."
+        echo "Please run manually: pip install -r dashboard/requirements.txt"
+    else
+        echo "      Dashboard dependencies installed via mirror."
+    fi
+else
+    echo "      Dashboard dependencies installed."
 fi
 
 echo ""

@@ -22,7 +22,7 @@ set "DATA_DIR=%USERPROFILE%\.openshield\captures"
 set "PLUGIN_SRC=%PROJECT_DIR%src\plugin\open_shield.ts"
 set "RULES_SRC=%PROJECT_DIR%core\rules"
 
-echo [0/5] Checking environment...
+echo [0/7] Checking environment...
 
 set "PYTHON_CMD="
 for %%c in (python python3) do (
@@ -59,7 +59,7 @@ if exist "%PLUGIN_DIR%" (
     echo       NOTE: OpenCode config not found. Will be created on first OpenCode launch.
 )
 
-echo [1/5] Installing Python dependencies...
+echo [1/7] Installing Python dependencies...
 cd /d "%PROJECT_DIR%"
 %PYTHON_CMD% -m pip install -r core\requirements.txt
 if errorlevel 1 (
@@ -75,7 +75,7 @@ if errorlevel 1 (
     echo       Dependencies ready.
 )
 
-echo [2/5] Copying detection rules...
+echo [2/7] Copying detection rules...
 if not exist "%RULES_DIR%" mkdir "%RULES_DIR%"
 if not exist "%RULES_DIR%\custom" mkdir "%RULES_DIR%\custom"
 if exist "%RULES_SRC%\pii.yaml" (
@@ -106,7 +106,7 @@ if exist "%RULES_SRC%\custom\" (
     )
 )
 
-echo [3/5] Installing plugin...
+echo [3/7] Installing plugin...
 if not exist "%PLUGIN_DIR%" mkdir "%PLUGIN_DIR%"
 if exist "%PLUGIN_SRC%" (
     copy /Y "%PLUGIN_SRC%" "%PLUGIN_DIR%\open_shield.ts" >nul
@@ -117,7 +117,7 @@ if exist "%PLUGIN_SRC%" (
     exit /b 1
 )
 
-echo [4/5] Installing Skill...
+echo [4/7] Installing Skill...
 if not exist "%SKILL_DIR%" mkdir "%SKILL_DIR%"
 if exist "%PROJECT_DIR%.opencode\skills\openshield-safety\SKILL.md" (
     copy /Y "%PROJECT_DIR%.opencode\skills\openshield-safety\SKILL.md" "%SKILL_DIR%" >nul
@@ -126,7 +126,7 @@ if exist "%PROJECT_DIR%.opencode\skills\openshield-safety\SKILL.md" (
     echo       Skill file not found, skipping.
 )
 
-echo [5/5] Creating directories and config...
+echo [5/7] Creating directories and config...
 if not exist "%DATA_DIR%" mkdir "%DATA_DIR%"
 if not exist "%LOGS_DIR%" mkdir "%LOGS_DIR%"
 set "CONFIG_FILE=%USERPROFILE%\.openshield\config.json"
@@ -140,6 +140,28 @@ set "PROJECT_DIR_FWD=%PROJECT_DIR_FWD:~0,-1%"
 echo       Data dir: %DATA_DIR%
 echo       Logs dir: %LOGS_DIR%
 echo       Config written: %USERPROFILE%\.openshield\config.json
+
+echo [6/7] Dashboard configuration
+set /p dashboard_port="Enter Dashboard port (default 9528): "
+if "%dashboard_port%"=="" set dashboard_port=9528
+:: Write dashboard_config.json
+%PYTHON_CMD% -c "import json; from pathlib import Path; p=Path.home()/'.openshield'/'dashboard_config.json'; d=json.load(open(p)) if p.exists() else {}; d['server_port']=%dashboard_port%; json.dump(d, open(p,'w'), indent=2)"
+echo       Dashboard port: %dashboard_port%
+
+echo [7/7] Installing Dashboard dependencies
+%PYTHON_CMD% -m pip install -r "%PROJECT_DIR%dashboard\requirements.txt" -q
+if errorlevel 1 (
+    echo       Retrying with Tsinghua mirror...
+    %PYTHON_CMD% -m pip install -r "%PROJECT_DIR%dashboard\requirements.txt" -i https://pypi.tuna.tsinghua.edu.cn/simple -q
+    if errorlevel 1 (
+        echo [WARNING] Dependencies installation failed.
+        echo Please run manually: pip install -r dashboard\requirements.txt
+    ) else (
+        echo       Dashboard dependencies installed via mirror.
+    )
+) else (
+    echo       Dashboard dependencies installed.
+)
 
 REM Phase B: Create path_policy.json
 set "POLICY_FILE=%USERPROFILE%\.openshield\path_policy.json"

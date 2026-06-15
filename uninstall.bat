@@ -14,7 +14,7 @@ set "RULES_DIR=%DATA_DIR%\rules"
 set "LOGS_DIR=%DATA_DIR%\logs"
 set "CAPTURES_DIR=%DATA_DIR%\captures"
 
-echo [0/7] Checking if OpenCode is running...
+echo [0/9] Checking if OpenCode is running...
 tasklist /FI "IMAGENAME eq opencode.exe" 2>nul | find /I "opencode.exe" >nul
 if not errorlevel 1 (
     echo       WARNING: OpenCode appears to be running.
@@ -27,7 +27,7 @@ if not errorlevel 1 (
     )
 )
 
-echo [1/7] Removing plugin...
+echo [1/9] Removing plugin...
 if exist "%PLUGIN_FILE%" (
     del /f /q "%PLUGIN_FILE%"
     echo       Removed: %PLUGIN_FILE%
@@ -35,7 +35,7 @@ if exist "%PLUGIN_FILE%" (
     echo       Plugin not found, skipping.
 )
 
-echo [2/7] Removing Skill...
+echo [2/9] Removing Skill...
 if exist "%SKILL_DIR%" (
     rmdir /s /q "%SKILL_DIR%"
     echo       Removed: %SKILL_DIR%
@@ -43,7 +43,7 @@ if exist "%SKILL_DIR%" (
     echo       Skill not found, skipping.
 )
 
-echo [3/7] Removing plugin config...
+echo [3/9] Removing plugin config...
 if exist "%DATA_DIR%\config.json" (
     del /f /q "%DATA_DIR%\config.json"
     echo       Removed: %DATA_DIR%\config.json
@@ -51,7 +51,7 @@ if exist "%DATA_DIR%\config.json" (
     echo       Config not found, skipping.
 )
 
-echo [3.5/7] Removing security files...
+echo [4/9] Removing security files...
 if exist "%DATA_DIR%\path_policy.json" (
     del /f /q "%DATA_DIR%\path_policy.json"
     echo       Removed: path_policy.json
@@ -71,7 +71,27 @@ if exist "%DATA_DIR%\config.json.backup" (
     echo       config.json.backup not found, skipping.
 )
 
-echo [4/7] Cleaning up detection rules...
+echo [5/9] Removing Dashboard files...
+if exist "%DATA_DIR%\dashboard_config.json" (
+    del /f /q "%DATA_DIR%\dashboard_config.json"
+    echo       Removed: dashboard_config.json
+) else (
+    echo       dashboard_config.json not found, skipping.
+)
+if exist "%DATA_DIR%\dashboard_config.json.bak" (
+    del /f /q "%DATA_DIR%\dashboard_config.json.bak"
+    echo       Removed: dashboard_config.json.bak
+) else (
+    echo       dashboard_config.json.bak not found, skipping.
+)
+if exist "%DATA_DIR%\config.json.bak" (
+    del /f /q "%DATA_DIR%\config.json.bak"
+    echo       Removed: config.json.bak
+) else (
+    echo       config.json.bak not found, skipping.
+)
+
+echo [6/9] Cleaning up detection rules...
 echo.
 set /p "DELETE_RULES=Do you want to delete detection rules? (y/N): "
 if /i "%DELETE_RULES%"=="y" (
@@ -85,7 +105,7 @@ if /i "%DELETE_RULES%"=="y" (
     echo       Rules preserved at: %RULES_DIR%
 )
 
-echo [5/7] Cleaning up log files...
+echo [7/9] Cleaning up log files...
 echo.
 set /p "DELETE_LOGS=Do you want to delete log files? (y/N): "
 if /i "%DELETE_LOGS%"=="y" (
@@ -99,7 +119,7 @@ if /i "%DELETE_LOGS%"=="y" (
     echo       Logs preserved at: %LOGS_DIR%
 )
 
-echo [6/7] Cleaning up captured data...
+echo [8/9] Cleaning up captured data...
 echo.
 set /p "DELETE_CAPTURES=Do you want to delete captured data? (y/N): "
 if /i "%DELETE_CAPTURES%"=="y" (
@@ -113,9 +133,9 @@ if /i "%DELETE_CAPTURES%"=="y" (
     echo       Captured data preserved at: %CAPTURES_DIR%
 )
 
-echo [7/7] Uninstalling Python dependencies...
+echo [9/9] Uninstalling Python dependencies...
 echo.
-echo       Affected packages: fastapi uvicorn pydantic pyyaml
+echo       Affected packages: fastapi uvicorn pydantic pyyaml flask
 echo       NOTE: These are common dependencies that other projects may use.
 echo.
 
@@ -128,7 +148,7 @@ for %%c in (python python3) do (
 set /p "PIP_UNINSTALL=Do you want to uninstall them? (y/N): "
 if /i "%PIP_UNINSTALL%"=="y" (
     if not "%PYTHON_CMD%"=="" (
-        %PYTHON_CMD% -m pip uninstall -y fastapi uvicorn pydantic pyyaml 2>nul
+        %PYTHON_CMD% -m pip uninstall -y fastapi uvicorn pydantic pyyaml flask 2>nul
         if not errorlevel 1 (
             echo       Dependencies uninstalled.
         ) else (

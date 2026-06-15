@@ -13,7 +13,7 @@ RULES_DIR="$DATA_DIR/rules"
 LOGS_DIR="$DATA_DIR/logs"
 CAPTURES_DIR="$DATA_DIR/captures"
 
-echo "[0/7] Checking if OpenCode is running..."
+echo "[0/9] Checking if OpenCode is running..."
 if pgrep -x opencode >/dev/null 2>&1; then
     echo "      WARNING: OpenCode appears to be running."
     read -p "      Continue with uninstall? (y/N): " CONTINUE
@@ -23,7 +23,7 @@ if pgrep -x opencode >/dev/null 2>&1; then
     fi
 fi
 
-echo "[1/7] Removing plugin..."
+echo "[1/9] Removing plugin..."
 if [ -f "$PLUGIN_FILE" ]; then
     rm -f "$PLUGIN_FILE"
     echo "      Removed: $PLUGIN_FILE"
@@ -31,7 +31,7 @@ else
     echo "      Plugin not found, skipping."
 fi
 
-echo "[2/7] Removing Skill..."
+echo "[2/9] Removing Skill..."
 if [ -d "$SKILL_DIR" ]; then
     rm -rf "$SKILL_DIR"
     echo "      Removed: $SKILL_DIR"
@@ -39,7 +39,7 @@ else
     echo "      Skill not found, skipping."
 fi
 
-echo "[3/7] Removing plugin config..."
+echo "[3/9] Removing plugin config..."
 if [ -f "$DATA_DIR/config.json" ]; then
     rm -f "$DATA_DIR/config.json"
     echo "      Removed: $DATA_DIR/config.json"
@@ -47,7 +47,7 @@ else
     echo "      Config not found, skipping."
 fi
 
-echo "[3.5/7] Removing security files..."
+echo "[4/9] Removing security files..."
 if [ -f "$DATA_DIR/path_policy.json" ]; then
     rm -f "$DATA_DIR/path_policy.json"
     echo "      Removed: path_policy.json"
@@ -67,7 +67,17 @@ for backup in "$DATA_DIR"/config.json.backup*; do
     fi
 done
 
-echo "[4/7] Cleaning up detection rules..."
+echo "[5/9] Removing Dashboard files..."
+for f in "$DATA_DIR/dashboard_config.json" "$DATA_DIR/dashboard_config.json.bak" "$DATA_DIR/config.json.bak"; do
+    if [ -f "$f" ]; then
+        rm -f "$f"
+        echo "      Removed: $(basename "$f")"
+    else
+        echo "      $(basename "$f") not found, skipping."
+    fi
+done
+
+echo "[6/9] Cleaning up detection rules..."
 echo ""
 read -p "Do you want to delete detection rules? (y/N): " DELETE_RULES
 if [ "$DELETE_RULES" = "y" ] || [ "$DELETE_RULES" = "Y" ]; then
@@ -81,7 +91,7 @@ else
     echo "      Rules preserved at: $RULES_DIR"
 fi
 
-echo "[5/7] Cleaning up log files..."
+echo "[7/9] Cleaning up log files..."
 echo ""
 read -p "Do you want to delete log files? (y/N): " DELETE_LOGS
 if [ "$DELETE_LOGS" = "y" ] || [ "$DELETE_LOGS" = "Y" ]; then
@@ -95,7 +105,7 @@ else
     echo "      Logs preserved at: $LOGS_DIR"
 fi
 
-echo "[6/7] Cleaning up captured data..."
+echo "[8/9] Cleaning up captured data..."
 echo ""
 read -p "Do you want to delete captured data? (y/N): " DELETE_CAPTURES
 if [ "$DELETE_CAPTURES" = "y" ] || [ "$DELETE_CAPTURES" = "Y" ]; then
@@ -109,9 +119,9 @@ else
     echo "      Captured data preserved at: $CAPTURES_DIR"
 fi
 
-echo "[7/7] Uninstalling Python dependencies..."
+echo "[9/9] Uninstalling Python dependencies..."
 echo ""
-echo "      Affected packages: fastapi uvicorn pydantic pyyaml"
+echo "      Affected packages: fastapi uvicorn pydantic pyyaml flask"
 echo "      NOTE: These are common dependencies that other projects may use."
 echo ""
 
@@ -126,7 +136,7 @@ done
 read -p "Do you want to uninstall them? (y/N): " PIP_UNINSTALL
 if [ "$PIP_UNINSTALL" = "y" ] || [ "$PIP_UNINSTALL" = "Y" ]; then
     if [ -n "$PYTHON_CMD" ]; then
-        $PYTHON_CMD -m pip uninstall -y fastapi uvicorn pydantic pyyaml 2>/dev/null
+        $PYTHON_CMD -m pip uninstall -y fastapi uvicorn pydantic pyyaml flask 2>/dev/null
         if [ $? -eq 0 ]; then
             echo "      Dependencies uninstalled."
         else

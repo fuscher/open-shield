@@ -1,0 +1,2008 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="api-token" content="{{API_TOKEN}}">
+    <title>OpenShield Dashboard</title>
+    <style>
+        /* ==================== CSS变量 ==================== */
+        :root {
+            /* 浅色模式 */
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f5f5;
+            --bg-sidebar: #f0f0f0;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --border-color: #e0e0e0;
+            --accent-color: #10b981;
+            --accent-hover: #34d399;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --switch-bg: #cccccc;
+            --switch-active: #10b981;
+            --card-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            --card-bg: #ffffff;
+            --card-radius: 12px;
+            --sidebar-bg: #f8f9fa;
+        }
+
+        [data-theme="dark"] {
+            /* 深色模式 - AI Poker Battle 风格 */
+            --bg-primary: #0B0E17;
+            --bg-secondary: #0F121E;
+            --bg-sidebar: #0D1019;
+            --text-primary: #EFF2F9;
+            --text-secondary: #8A94B0;
+            --border-color: rgba(48,54,79,0.6);
+            --accent-color: #10B981;
+            --accent-hover: #34D399;
+            --success-color: #10B981;
+            --warning-color: #F59E0B;
+            --danger-color: #EF4444;
+            --switch-bg: #262C3F;
+            --switch-active: #10B981;
+            --card-bg: rgba(18,22,35,0.85);
+            --card-shadow: 0 20px 35px -12px rgba(0,0,0,0.5);
+            --card-radius: 28px;
+            --sidebar-bg: #0D1019;
+        }
+
+        /* ==================== 基础样式 ==================== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        /* 网格背景 (仅深色模式) */
+        [data-theme="dark"] body::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image:
+                linear-gradient(rgba(16,185,129,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(16,185,129,0.03) 1px, transparent 1px);
+            background-size: 32px 32px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ==================== 布局 ==================== */
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* 侧边栏 */
+        .sidebar {
+            width: 200px;
+            background-color: var(--bg-sidebar);
+            border-right: 1px solid var(--border-color);
+            padding: 20px 0;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header {
+            padding: 0 20px 20px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 10px;
+        }
+
+        .sidebar-header h1 {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--accent-color);
+        }
+
+        [data-theme="dark"] .sidebar-header h1 {
+            background: linear-gradient(135deg, #E2F0FF 0%, #A0F0FF 100%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+        }
+
+        .nav-item {
+            padding: 12px 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+        }
+
+        .nav-item:hover {
+            background-color: rgba(16,185,129,0.08);
+            border-left-color: rgba(16,185,129,0.3);
+        }
+
+        .nav-item.active {
+            background-color: rgba(16,185,129,0.12);
+            border-left-color: #10B981;
+            color: #10B981;
+        }
+
+        /* 主内容区 */
+        .main-content {
+            flex: 1;
+            padding: 28px;
+            overflow-y: auto;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .page-header h2 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.3px;
+        }
+
+        [data-theme="dark"] .page-header h2 {
+            background: linear-gradient(135deg, #E2F0FF 0%, #A0F0FF 100%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+        }
+
+        /* 状态栏 */
+        .status-bar {
+            background-color: var(--bg-sidebar);
+            border-top: 1px solid var(--border-color);
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+            box-shadow: 0 0 6px currentColor;
+        }
+
+        .status-indicator.running {
+            background-color: var(--success-color);
+            color: var(--success-color);
+        }
+        .status-indicator.stopped {
+            background-color: var(--danger-color);
+            color: var(--danger-color);
+        }
+
+        /* ==================== 卡片 ==================== */
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(2px);
+            border-radius: var(--card-radius);
+            padding: 24px 28px;
+            margin-bottom: 24px;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--card-shadow), 0 0 0 0.5px rgba(255,255,255,0.03) inset;
+            transition: border-color 0.3s;
+        }
+
+        .card:hover {
+            border-color: rgba(16,185,129,0.4);
+        }
+
+        .card-header {
+            font-size: 1.15rem;
+            font-weight: 600;
+            margin-bottom: 18px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+
+        /* ==================== 表单元素 ==================== */
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .form-row {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="url"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 2px rgba(16,185,129,0.15);
+        }
+
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        /* 开关 */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--switch-bg);
+            transition: .3s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--switch-active);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(24px);
+        }
+
+        /* 按钮 */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--accent-hover);
+            box-shadow: 0 4px 12px rgba(16,185,129,0.3);
+        }
+
+        .btn-success {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .btn-danger {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        .btn-warning {
+            background-color: var(--warning-color);
+            color: white;
+        }
+
+        .btn-outline {
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .btn-outline:hover {
+            background-color: rgba(16,185,129,0.08);
+            border-color: rgba(16,185,129,0.4);
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+            border-radius: 8px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        /* ==================== 表格 ==================== */
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 8px;
+        }
+
+        th {
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            padding: 8px 12px;
+        }
+
+        td {
+            background: var(--bg-secondary);
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        td:first-child {
+            border-radius: 12px 0 0 12px;
+        }
+
+        td:last-child {
+            border-radius: 0 12px 12px 0;
+        }
+
+        tr:hover td {
+            border-color: rgba(16,185,129,0.4);
+        }
+
+        /* ==================== 标签 ==================== */
+        .tag {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 40px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .tag-low { background-color: rgba(16,185,129,0.15); color: #6EE7B7; border: 1px solid rgba(16,185,129,0.3); }
+        .tag-medium { background-color: rgba(245,158,11,0.15); color: #FCD34D; border: 1px solid rgba(245,158,11,0.3); }
+        .tag-high { background-color: rgba(239,68,68,0.15); color: #FCA5A5; border: 1px solid rgba(239,68,68,0.3); }
+        .tag-critical { background-color: rgba(239,68,68,0.3); color: #FCA5A5; border: 1px solid rgba(239,68,68,0.5); }
+
+        /* ==================== Tab ==================== */
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 18px;
+            gap: 4px;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            border-radius: 8px 8px 0 0;
+        }
+
+        .tab:hover {
+            background-color: rgba(16,185,129,0.08);
+            color: var(--text-primary);
+        }
+
+        .tab.active {
+            border-bottom-color: var(--accent-color);
+            color: var(--accent-color);
+            background-color: rgba(16,185,129,0.08);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* ==================== Tag输入 ==================== */
+        .tag-input-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            background-color: var(--bg-secondary);
+            min-height: 44px;
+            transition: border-color 0.2s;
+        }
+
+        .tag-input-container:focus-within {
+            border-color: var(--accent-color);
+        }
+
+        .tag-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            background-color: rgba(16,185,129,0.15);
+            color: #6EE7B7;
+            border: 1px solid rgba(16,185,129,0.3);
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .tag-item .remove-tag {
+            cursor: pointer;
+            opacity: 0.7;
+        }
+
+        .tag-item .remove-tag:hover {
+            opacity: 1;
+        }
+
+        .tag-input {
+            border: none;
+            outline: none;
+            background: transparent;
+            min-width: 100px;
+            font-size: 12px;
+            color: var(--text-primary);
+        }
+
+        /* ==================== 弹窗 ==================== */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0,0,0,0.7);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--card-bg);
+            border-radius: 24px;
+            border: 1px solid var(--border-color);
+            padding: 24px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+        }
+
+        .modal-header {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .modal-footer {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        /* ==================== 状态卡片 ==================== */
+        .status-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 18px;
+            margin-bottom: 24px;
+        }
+
+        .status-card {
+            background: var(--bg-secondary);
+            border-radius: 24px;
+            padding: 18px 16px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            transition: border-color 0.3s;
+        }
+
+        .status-card:hover {
+            border-color: rgba(16,185,129,0.4);
+        }
+
+        .status-card .label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .status-card .value {
+            font-size: 1.8rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .status-card .status-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        .status-card .status-dot.running {
+            background-color: var(--success-color);
+            color: var(--success-color);
+        }
+        .status-card .status-dot.stopped {
+            background-color: var(--danger-color);
+            color: var(--danger-color);
+        }
+
+        /* ==================== 列表项 ==================== */
+        .list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 0;
+            border-bottom: 1px dashed var(--border-color);
+        }
+
+        .list-item:last-child {
+            border-bottom: none;
+        }
+
+        /* ==================== 隐藏页面 ==================== */
+        .page {
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        /* ==================== 响应式 ==================== */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 60px;
+            }
+            .nav-item span {
+                display: none;
+            }
+            .nav-item {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h1 id="app-title">🛡️ OpenShield</h1>
+            </div>
+            <div class="nav-item active" data-page="overview">
+                <span>📊</span>
+                <span id="nav-overview">概览</span>
+            </div>
+            <div class="nav-item" data-page="basic">
+                <span>⚙️</span>
+                <span id="nav-basic">基础设置</span>
+            </div>
+            <div class="nav-item" data-page="advanced">
+                <span>🔧</span>
+                <span id="nav-advanced">高级设置</span>
+            </div>
+            <div class="nav-item" data-page="path-policy">
+                <span>📁</span>
+                <span id="nav-path">路径策略</span>
+            </div>
+            <div class="nav-item" data-page="rules">
+                <span>📝</span>
+                <span id="nav-rules">规则管理</span>
+            </div>
+            <div class="nav-item" data-page="notifications">
+                <span>🔔</span>
+                <span id="nav-notifications">通知管理</span>
+            </div>
+            <div class="nav-item" data-page="logs">
+                <span>📜</span>
+                <span id="nav-logs">日志查看</span>
+            </div>
+        </nav>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <!-- 概览页 -->
+            <div id="page-overview" class="page active">
+                <div class="page-header">
+                    <h2 id="overview-title">系统概览</h2>
+                    <div>
+                        <button class="btn btn-outline" id="theme-toggle">🌙</button>
+                        <button class="btn btn-outline" id="lang-toggle">EN</button>
+                    </div>
+                </div>
+
+                <div class="status-cards">
+                    <div class="status-card">
+                        <div class="label" id="label-config-service">配置服务</div>
+                        <div class="value">
+                            <span class="status-dot running"></span>
+                            <span id="status-config">运行中</span>
+                        </div>
+                    </div>
+                    <div class="status-card">
+                        <div class="label" id="label-detect-service">检测服务</div>
+                        <div class="value">
+                            <span class="status-dot" id="detect-status-dot"></span>
+                            <span id="status-detect">检查中...</span>
+                        </div>
+                    </div>
+                    <div class="status-card">
+                        <div class="label" id="label-rules-count">规则文件</div>
+                        <div class="value" id="rules-count">-</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header" id="config-summary-title">当前配置摘要</div>
+                    <div id="config-summary"></div>
+                </div>
+            </div>
+
+            <!-- 基础设置页 -->
+            <div id="page-basic" class="page">
+                <div class="page-header">
+                    <h2 id="basic-title">基础设置</h2>
+                </div>
+
+                <div class="card">
+                    <div class="card-header" id="detect-switch-title">检测开关</div>
+                    <div class="form-row">
+                        <label id="label-pii">PII检测</label>
+                        <label class="switch">
+                            <input type="checkbox" id="switch-pii" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="form-row">
+                        <label id="label-keywords">关键词检测</label>
+                        <label class="switch">
+                            <input type="checkbox" id="switch-keywords" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="form-row">
+                        <label id="label-injection">注入检测</label>
+                        <label class="switch">
+                            <input type="checkbox" id="switch-injection" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="form-row">
+                        <label id="label-output">输出敏感检测</label>
+                        <label class="switch">
+                            <input type="checkbox" id="switch-output" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header" id="global-threshold-title">全局阈值</div>
+                    <div class="form-group">
+                        <label id="label-block-level">阻断阈值</label>
+                        <select id="global-block-level">
+                            <option value="low">low</option>
+                            <option value="medium">medium</option>
+                            <option value="high">high</option>
+                            <option value="critical" selected>critical</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label id="label-manual-level">人工确认阈值</label>
+                        <select id="global-manual-level">
+                            <option value="low">low</option>
+                            <option value="medium">medium</option>
+                            <option value="high" selected>high</option>
+                            <option value="critical">critical</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-outline" id="btn-apply-global" onclick="applyGlobalThreshold()">
+                        应用到所有检测类型
+                    </button>
+                </div>
+
+                <div class="card">
+                    <div class="card-header" id="notify-title">通知设置</div>
+                    <div class="form-row">
+                        <label id="label-system-notify">系统通知</label>
+                        <label class="switch">
+                            <input type="checkbox" id="switch-system-notify" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 10px;">
+                        <span id="notify-platform-note">平台支持: Windows ✓ Linux ✓ macOS ✗ (暂不支持)</span>
+                    </div>
+                </div>
+
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="saveBasicSettings()" id="btn-save-basic">保存设置</button>
+                    <button class="btn btn-outline" onclick="resetToDefault()" id="btn-reset-basic">还原默认</button>
+                </div>
+            </div>
+
+            <!-- 高级设置页 -->
+            <div id="page-advanced" class="page">
+                <div class="page-header">
+                    <h2 id="advanced-title">高级设置</h2>
+                </div>
+
+                <div class="card">
+                    <div class="card-header" id="threshold-title">分类阈值</div>
+                    <div id="threshold-settings"></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header" id="ts-params-title">TS插件参数 <small style="color: var(--text-secondary);">参数修改保存后约5秒内自动生效</small></div>
+                    <div id="ts-params-settings"></div>
+                </div>
+
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="saveAdvancedSettings()" id="btn-save-advanced">保存设置</button>
+                    <button class="btn btn-outline" onclick="resetToDefault()" id="btn-reset-advanced">还原默认</button>
+                </div>
+            </div>
+
+            <!-- 路径策略页 -->
+            <div id="page-path-policy" class="page">
+                <div class="page-header">
+                    <h2 id="path-title">路径策略</h2>
+                </div>
+
+                <div class="card">
+                    <div style="color: var(--warning-color); margin-bottom: 15px;">
+                        ⚠️ <span id="path-restart-note">路径策略修改后需重启OpenCode服务生效</span>
+                    </div>
+                    <div class="form-row">
+                        <label id="label-learning-mode">学习模式</label>
+                        <label class="switch">
+                            <input type="checkbox" id="switch-learning-mode" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <span style="font-size: 12px; color: var(--text-secondary);" id="learning-mode-note">未匹配路径将被记录但允许访问</span>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header" id="blacklist-title">黑名单</div>
+                    <div id="blacklist-container"></div>
+                    <button class="btn btn-outline btn-sm" onclick="addListItem('blacklist')" id="btn-add-blacklist">+ 添加</button>
+                </div>
+
+                <div class="card">
+                    <div class="card-header" id="whitelist-title">白名单</div>
+                    <div id="whitelist-container"></div>
+                    <button class="btn btn-outline btn-sm" onclick="addListItem('whitelist')" id="btn-add-whitelist">+ 添加</button>
+                </div>
+
+                <div class="card">
+                    <div class="card-header" id="sensitive-title">敏感文件监控</div>
+                    <div id="sensitive-container"></div>
+                    <button class="btn btn-outline btn-sm" onclick="addListItem('sensitive_read_patterns')" id="btn-add-sensitive">+ 添加</button>
+                </div>
+
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="savePathPolicy()" id="btn-save-path">保存策略</button>
+                    <button class="btn btn-outline" onclick="resetPathPolicy()" id="btn-reset-path">还原默认</button>
+                </div>
+            </div>
+
+            <!-- 规则管理页 -->
+            <div id="page-rules" class="page">
+                <div class="page-header">
+                    <h2 id="rules-title">规则管理</h2>
+                </div>
+
+                <div class="tabs">
+                    <div class="tab active" data-tab="pii" id="tab-pii">PII</div>
+                    <div class="tab" data-tab="keywords" id="tab-keywords">关键词</div>
+                    <div class="tab" data-tab="injection" id="tab-injection">注入</div>
+                    <div class="tab" data-tab="output_sensitivity" id="tab-output">输出敏感</div>
+                    <div class="tab" data-tab="response_guard" id="tab-response">响应监控</div>
+                    <div class="tab" data-tab="custom" id="tab-custom">自定义</div>
+                </div>
+
+                <div id="response-guard-note" style="color: var(--warning-color); margin-bottom: 15px; display: none;">
+                    ⚠️ <span id="response-guard-warning">此规则集目前仅支持编辑存储，尚未集成到检测引擎。</span>
+                </div>
+
+                <div id="rules-content"></div>
+
+                <div class="btn-group">
+                    <button class="btn btn-outline" onclick="importRules()" id="btn-import-rules">导入YAML</button>
+                    <button class="btn btn-outline" onclick="exportRules()" id="btn-export-rules">导出YAML</button>
+                </div>
+            </div>
+
+            <!-- 通知管理页 -->
+            <div id="page-notifications" class="page">
+                <div class="page-header">
+                    <h2 id="notifications-title">通知管理</h2>
+                    <button class="btn btn-primary" onclick="showAddWebhookModal()" id="btn-add-webhook">+ 添加Webhook</button>
+                </div>
+
+                <div class="card">
+                    <div id="webhooks-list"></div>
+                </div>
+            </div>
+
+            <!-- 日志查看页 -->
+            <div id="page-logs" class="page">
+                <div class="page-header">
+                    <h2 id="logs-title">日志查看</h2>
+                </div>
+
+                <div class="card">
+                    <div class="form-row">
+                        <select id="log-date-filter">
+                            <option value="" id="opt-all-dates">全部日期</option>
+                        </select>
+                        <select id="log-level-filter">
+                            <option value="" id="opt-all-levels">全部级别</option>
+                            <option value="low">low</option>
+                            <option value="medium">medium</option>
+                            <option value="high">high</option>
+                            <option value="critical">critical</option>
+                        </select>
+                        <select id="log-type-filter">
+                            <option value="detect" id="opt-detect-logs">检测日志</option>
+                            <option value="notify" id="opt-notify-logs">通知日志</option>
+                        </select>
+                        <button class="btn btn-outline" onclick="loadLogs()" id="btn-refresh-logs">刷新</button>
+                        <button class="btn btn-danger btn-sm" onclick="showCleanLogsModal()" id="btn-clean-logs">清理旧日志</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th id="th-time">时间</th>
+                                    <th id="th-type">类型</th>
+                                    <th id="th-level">级别</th>
+                                    <th id="th-action">动作</th>
+                                    <th id="th-summary">摘要</th>
+                                </tr>
+                            </thead>
+                            <tbody id="logs-table-body">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="logs-pagination" style="margin-top: 15px; text-align: center;"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 状态栏 -->
+    <div class="status-bar">
+        <div>
+            <span id="status-label-config">配置服务</span>: <span class="status-dot running"></span> <span id="status-bar-config">运行中</span>
+            &nbsp;|&nbsp;
+            <span id="status-label-detect">检测服务</span>: <span class="status-dot" id="status-bar-detect-dot"></span> <span id="status-bar-detect">检查中...</span>
+        </div>
+        <div>
+            <span id="status-lang">语言: 中文</span>
+        </div>
+    </div>
+
+    <!-- Webhook编辑弹窗 -->
+    <div class="modal-overlay" id="webhook-modal">
+        <div class="modal">
+            <div class="modal-header" id="webhook-modal-title">添加Webhook</div>
+            <div class="form-group">
+                <label id="label-webhook-name">名称</label>
+                <input type="text" id="webhook-name" placeholder="例如: 飞书通知">
+            </div>
+            <div class="form-group">
+                <label id="label-webhook-url">URL</label>
+                <input type="url" id="webhook-url" placeholder="https://...">
+            </div>
+            <div class="form-row">
+                <label id="label-webhook-enabled">启用</label>
+                <label class="switch">
+                    <input type="checkbox" id="webhook-enabled" checked>
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeWebhookModal()" id="btn-cancel-webhook">取消</button>
+                <button class="btn btn-primary" onclick="testWebhook()" id="btn-test-webhook">测试发送</button>
+                <button class="btn btn-primary" onclick="saveWebhook()" id="btn-save-webhook">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 清理日志弹窗 -->
+    <div class="modal-overlay" id="clean-logs-modal">
+        <div class="modal">
+            <div class="modal-header" id="clean-logs-title">清理旧日志</div>
+            <div class="form-group">
+                <label id="label-retain-days">保留最近天数</label>
+                <input type="number" id="retain-days" value="30" min="1">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeCleanLogsModal()" id="btn-cancel-clean">取消</button>
+                <button class="btn btn-danger" onclick="cleanLogs()" id="btn-confirm-clean">确认清理</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 导入规则弹窗 -->
+    <div class="modal-overlay" id="import-modal">
+        <div class="modal">
+            <div class="modal-header" id="import-modal-title">导入规则YAML</div>
+            <div class="form-group">
+                <textarea id="import-yaml-content" rows="10" placeholder="粘贴YAML内容..."></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeImportModal()" id="btn-cancel-import">取消</button>
+                <button class="btn btn-primary" onclick="confirmImport()" id="btn-confirm-import">导入</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== 全局状态 ====================
+        const API_TOKEN = "{{API_TOKEN}}";
+        let currentLang = 'zh';
+        let currentTheme = 'light';
+        let currentTab = 'pii';
+        let editingWebhookIndex = -1;
+        let config = {};
+        let pathPolicy = {};
+        let rules = {};
+        let webhooks = [];
+
+        // ==================== API调用 ====================
+        async function apiCall(url, method = 'GET', body = null) {
+            const headers = { 'Content-Type': 'application/json' };
+            if (API_TOKEN) {
+                headers['Authorization'] = `Bearer ${API_TOKEN}`;
+            }
+            
+            const options = { method, headers };
+            if (body) {
+                options.body = JSON.stringify(body);
+            }
+            
+            const response = await fetch(url, options);
+            if (!response.ok) {
+                throw new Error(`API error: ${response.status}`);
+            }
+            return response.json();
+        }
+
+        // ==================== 初始化 ====================
+        async function init() {
+            loadTheme();
+            loadLang();
+            setupNavigation();
+            setupTabs();
+            await loadAllData();
+            checkDetectService();
+        }
+
+        async function loadAllData() {
+            try {
+                config = await apiCall('/api/config');
+                pathPolicy = await apiCall('/api/path-policy');
+                rules = await apiCall('/api/rules');
+                webhooks = await apiCall('/api/webhooks');
+                
+                renderOverview();
+                renderBasicSettings();
+                renderAdvancedSettings();
+                renderPathPolicy();
+                renderRules();
+                renderWebhooks();
+                await loadLogDates();
+            } catch (err) {
+                console.error('Failed to load data:', err);
+            }
+        }
+
+        // ==================== 导航 ====================
+        function setupNavigation() {
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const page = item.dataset.page;
+                    showPage(page);
+                });
+            });
+        }
+
+        function showPage(page) {
+            document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            
+            document.querySelector(`[data-page="${page}"]`).classList.add('active');
+            document.getElementById(`page-${page}`).classList.add('active');
+        }
+
+        // ==================== Tab切换 ====================
+        function setupTabs() {
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const tabName = tab.dataset.tab;
+                    switchTab(tabName);
+                });
+            });
+        }
+
+        function switchTab(tabName) {
+            currentTab = tabName;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+            
+            // 显示/隐藏response_guard警告
+            document.getElementById('response-guard-note').style.display = 
+                tabName === 'response_guard' ? 'block' : 'none';
+            
+            renderRules();
+        }
+
+        // ==================== 主题切换 ====================
+        function loadTheme() {
+            const saved = localStorage.getItem('openshield-theme') || 'light';
+            setTheme(saved);
+        }
+
+        function setTheme(theme) {
+            currentTheme = theme;
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('openshield-theme', theme);
+            document.getElementById('theme-toggle').textContent = theme === 'dark' ? '☀️' : '🌙';
+        }
+
+        document.getElementById('theme-toggle').addEventListener('click', () => {
+            setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+        });
+
+        // ==================== 语言切换 ====================
+        const i18n = {
+            zh: {
+                'app-title': '🛡️ OpenShield',
+                'nav-overview': '概览',
+                'nav-basic': '基础设置',
+                'nav-advanced': '高级设置',
+                'nav-path': '路径策略',
+                'nav-rules': '规则管理',
+                'nav-notifications': '通知管理',
+                'nav-logs': '日志查看',
+                'overview-title': '系统概览',
+                'basic-title': '基础设置',
+                'advanced-title': '高级设置',
+                'path-title': '路径策略',
+                'rules-title': '规则管理',
+                'notifications-title': '通知管理',
+                'logs-title': '日志查看',
+                'label-config-service': '配置服务',
+                'label-detect-service': '检测服务',
+                'label-rules-count': '规则文件',
+                'status-config': '运行中',
+                'config-summary-title': '当前配置摘要',
+                'detect-switch-title': '检测开关',
+                'label-pii': 'PII检测',
+                'label-keywords': '关键词检测',
+                'label-injection': '注入检测',
+                'label-output': '输出敏感检测',
+                'global-threshold-title': '全局阈值',
+                'label-block-level': '阻断阈值',
+                'label-manual-level': '人工确认阈值',
+                'btn-apply-global': '应用到所有检测类型',
+                'notify-title': '通知设置',
+                'label-system-notify': '系统通知',
+                'notify-platform-note': '平台支持: Windows ✓ Linux ✓ macOS ✗ (暂不支持)',
+                'threshold-title': '分类阈值',
+                'ts-params-title': 'TS插件参数',
+                'ts-params-note': '参数修改保存后约5秒内自动生效',
+                'path-restart-note': '路径策略修改后需重启OpenCode服务生效',
+                'label-learning-mode': '学习模式',
+                'learning-mode-note': '未匹配路径将被记录但允许访问',
+                'blacklist-title': '黑名单',
+                'whitelist-title': '白名单',
+                'sensitive-title': '敏感文件监控',
+                'btn-add': '+ 添加',
+                'btn-add-blacklist': '+ 添加',
+                'btn-add-whitelist': '+ 添加',
+                'btn-add-sensitive': '+ 添加',
+                'tab-pii': 'PII',
+                'tab-keywords': '关键词',
+                'tab-injection': '注入',
+                'tab-output': '输出敏感',
+                'tab-response': '响应监控',
+                'tab-custom': '自定义',
+                'response-guard-warning': '此规则集目前仅支持编辑存储，尚未集成到检测引擎。',
+                'opt-all-dates': '全部日期',
+                'opt-all-levels': '全部级别',
+                'opt-detect-logs': '检测日志',
+                'opt-notify-logs': '通知日志',
+                'th-time': '时间',
+                'th-type': '类型',
+                'th-level': '级别',
+                'th-action': '动作',
+                'th-summary': '摘要',
+                'status-lang': '语言: 中文',
+                'btn-save-basic': '保存设置',
+                'btn-reset-basic': '还原默认',
+                'btn-save-advanced': '保存设置',
+                'btn-reset-advanced': '还原默认',
+                'btn-save-path': '保存策略',
+                'btn-reset-path': '还原默认',
+                'btn-add-webhook': '+ 添加Webhook',
+                'btn-refresh-logs': '刷新',
+                'btn-clean-logs': '清理旧日志',
+                'btn-import-rules': '导入YAML',
+                'btn-export-rules': '导出YAML',
+                'status-running': '运行中',
+                'status-stopped': '已停止',
+                'status-checking': '检查中...',
+                'rules-count-unit': ' 条',
+                'summary-threshold': '阈值',
+                'summary-webhook-count': 'Webhook',
+                'summary-webhook-unit': ' 个',
+                'webhook-modal-title': '添加Webhook',
+                'label-webhook-name': '名称',
+                'label-webhook-url': 'URL',
+                'label-webhook-enabled': '启用',
+                'btn-cancel-webhook': '取消',
+                'btn-test-webhook': '测试发送',
+                'btn-save-webhook': '保存',
+                'import-modal-title': '导入规则YAML',
+                'btn-cancel-import': '取消',
+                'btn-confirm-import': '导入',
+                'clean-logs-title': '清理旧日志',
+                'label-retain-days': '保留最近天数',
+                'btn-cancel-clean': '取消',
+                'btn-confirm-clean': '确认清理',
+                'btn-delete': '删除',
+                'th-name': '名称',
+                'th-type': '类型',
+                'th-pattern': '模式/关键词',
+                'th-level-col': '级别',
+                'th-actions': '操作',
+                'btn-edit': '编辑',
+                'btn-add-rule': '+ 添加规则',
+                'msg-no-rules': '暂无规则数据',
+                'msg-no-webhooks': '暂无Webhook配置',
+                'msg-applied': '已应用到所有检测类型',
+                'msg-saved': '保存成功',
+                'msg-reset': '已还原默认设置',
+                'msg-import-success': '导入成功',
+                'msg-import-fail': '导入失败',
+                'msg-test-success': '测试发送成功',
+                'msg-test-fail': '测试发送失败',
+                'msg-dev': '功能开发中...',
+                'msg-cleaned': '已清理日志文件',
+            },
+            en: {
+                'app-title': '🛡️ OpenShield',
+                'nav-overview': 'Overview',
+                'nav-basic': 'Basic',
+                'nav-advanced': 'Advanced',
+                'nav-path': 'Path Policy',
+                'nav-rules': 'Rules',
+                'nav-notifications': 'Notifications',
+                'nav-logs': 'Logs',
+                'overview-title': 'System Overview',
+                'basic-title': 'Basic Settings',
+                'advanced-title': 'Advanced Settings',
+                'path-title': 'Path Policy',
+                'rules-title': 'Rules Management',
+                'notifications-title': 'Notifications',
+                'logs-title': 'Logs',
+                'label-config-service': 'Config Service',
+                'label-detect-service': 'Detect Service',
+                'label-rules-count': 'Rule Files',
+                'status-config': 'Running',
+                'config-summary-title': 'Configuration Summary',
+                'detect-switch-title': 'Detection Switches',
+                'label-pii': 'PII Detection',
+                'label-keywords': 'Keyword Detection',
+                'label-injection': 'Injection Detection',
+                'label-output': 'Output Detection',
+                'global-threshold-title': 'Global Threshold',
+                'label-block-level': 'Block Threshold',
+                'label-manual-level': 'Manual Threshold',
+                'btn-apply-global': 'Apply to All Types',
+                'notify-title': 'Notification Settings',
+                'label-system-notify': 'System Notification',
+                'notify-platform-note': 'Platform Support: Windows ✓ Linux ✓ macOS ✗ (Not Supported)',
+                'threshold-title': 'Category Thresholds',
+                'ts-params-title': 'TS Plugin Parameters',
+                'ts-params-note': 'Changes take effect in ~5 seconds',
+                'path-restart-note': 'Requires OpenCode restart to take effect',
+                'label-learning-mode': 'Learning Mode',
+                'learning-mode-note': 'Unmatched paths will be logged but allowed',
+                'blacklist-title': 'Blacklist',
+                'whitelist-title': 'Whitelist',
+                'sensitive-title': 'Sensitive File Monitor',
+                'btn-add': '+ Add',
+                'btn-add-blacklist': '+ Add',
+                'btn-add-whitelist': '+ Add',
+                'btn-add-sensitive': '+ Add',
+                'tab-pii': 'PII',
+                'tab-keywords': 'Keywords',
+                'tab-injection': 'Injection',
+                'tab-output': 'Output',
+                'tab-response': 'Response',
+                'tab-custom': 'Custom',
+                'response-guard-warning': 'This rule set supports editing only, not yet integrated into detection engine.',
+                'opt-all-dates': 'All Dates',
+                'opt-all-levels': 'All Levels',
+                'opt-detect-logs': 'Detection Logs',
+                'opt-notify-logs': 'Notification Logs',
+                'th-time': 'Time',
+                'th-type': 'Type',
+                'th-level': 'Level',
+                'th-action': 'Action',
+                'th-summary': 'Summary',
+                'status-lang': 'Language: English',
+                'btn-save-basic': 'Save',
+                'btn-reset-basic': 'Reset Default',
+                'btn-save-advanced': 'Save',
+                'btn-reset-advanced': 'Reset Default',
+                'btn-save-path': 'Save Policy',
+                'btn-reset-path': 'Reset Default',
+                'btn-add-webhook': '+ Add Webhook',
+                'btn-refresh-logs': 'Refresh',
+                'btn-clean-logs': 'Clean Old Logs',
+                'btn-import-rules': 'Import YAML',
+                'btn-export-rules': 'Export YAML',
+                'status-running': 'Running',
+                'status-stopped': 'Stopped',
+                'status-checking': 'Checking...',
+                'rules-count-unit': ' rules',
+                'summary-threshold': 'Threshold',
+                'summary-webhook-count': 'Webhook',
+                'summary-webhook-unit': '',
+                'webhook-modal-title': 'Add Webhook',
+                'label-webhook-name': 'Name',
+                'label-webhook-url': 'URL',
+                'label-webhook-enabled': 'Enabled',
+                'btn-cancel-webhook': 'Cancel',
+                'btn-test-webhook': 'Test Send',
+                'btn-save-webhook': 'Save',
+                'import-modal-title': 'Import Rule YAML',
+                'btn-cancel-import': 'Cancel',
+                'btn-confirm-import': 'Import',
+                'clean-logs-title': 'Clean Old Logs',
+                'label-retain-days': 'Retain Days',
+                'btn-cancel-clean': 'Cancel',
+                'btn-confirm-clean': 'Confirm Clean',
+                'btn-delete': 'Delete',
+                'th-name': 'Name',
+                'th-type': 'Type',
+                'th-pattern': 'Pattern/Keywords',
+                'th-level-col': 'Level',
+                'th-actions': 'Actions',
+                'btn-edit': 'Edit',
+                'btn-add-rule': '+ Add Rule',
+                'msg-no-rules': 'No rule data',
+                'msg-no-webhooks': 'No webhook configured',
+                'msg-applied': 'Applied to all detection types',
+                'msg-saved': 'Saved successfully',
+                'msg-reset': 'Reset to default',
+                'msg-import-success': 'Import successful',
+                'msg-import-fail': 'Import failed',
+                'msg-test-success': 'Test sent successfully',
+                'msg-test-fail': 'Test failed',
+                'msg-dev': 'Feature in development...',
+                'msg-cleaned': 'Cleaned log files',
+            }
+        };
+
+        function loadLang() {
+            currentLang = localStorage.getItem('openshield-lang') || 'zh';
+            applyLang();
+        }
+
+        function applyLang() {
+            const texts = i18n[currentLang];
+            Object.keys(texts).forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = texts[id];
+            });
+            document.getElementById('lang-toggle').textContent = currentLang === 'zh' ? 'EN' : '中';
+        }
+
+        document.getElementById('lang-toggle').addEventListener('click', () => {
+            currentLang = currentLang === 'zh' ? 'en' : 'zh';
+            localStorage.setItem('openshield-lang', currentLang);
+            applyLang();
+        });
+
+        // ==================== 概览页 ====================
+        function renderOverview() {
+            // 检测服务状态
+            const detectDot = document.getElementById('detect-status-dot');
+            const detectStatus = document.getElementById('status-detect');
+            const statusBarDetectDot = document.getElementById('status-bar-detect-dot');
+            const statusBarDetect = document.getElementById('status-bar-detect');
+            
+            // 规则数量
+            let ruleCount = 0;
+            if (rules.pii?.pii_rules) ruleCount += rules.pii.pii_rules.length || 0;
+            if (rules.keywords?.keyword_rules) ruleCount += rules.keywords.keyword_rules.length || 0;
+            if (rules.injection?.injection_rules) ruleCount += rules.injection.injection_rules.length || 0;
+            document.getElementById('rules-count').textContent = ruleCount + i18n[currentLang]['rules-count-unit'];
+            
+            // 配置摘要
+            const summary = document.getElementById('config-summary');
+            const thresholds = config.thresholds || {};
+            summary.innerHTML = `
+                <p>${i18n[currentLang]['summary-threshold']}: block=${thresholds.pii?.block_level || 'critical'}, manual=${thresholds.pii?.manual_level || 'high'}</p>
+                <p>${i18n[currentLang]['summary-webhook-count']}: ${webhooks.length}${i18n[currentLang]['summary-webhook-unit']}</p>
+            `;
+        }
+
+        async function checkDetectService() {
+            try {
+                const result = await apiCall('/api/detect-service/status');
+                const dot = document.getElementById('detect-status-dot');
+                const status = document.getElementById('status-detect');
+                const barDot = document.getElementById('status-bar-detect-dot');
+                const barStatus = document.getElementById('status-bar-detect');
+                
+                if (result.status === 'running') {
+                    dot.className = 'status-dot running';
+                    status.textContent = i18n[currentLang]['status-running'];
+                    barDot.className = 'status-dot running';
+                    barStatus.textContent = i18n[currentLang]['status-running'];
+                } else {
+                    dot.className = 'status-dot stopped';
+                    status.textContent = i18n[currentLang]['status-stopped'];
+                    barDot.className = 'status-dot stopped';
+                    barStatus.textContent = i18n[currentLang]['status-stopped'];
+                }
+            } catch {
+                document.getElementById('detect-status-dot').className = 'status-dot stopped';
+                document.getElementById('status-detect').textContent = i18n[currentLang]['status-stopped'];
+            }
+        }
+
+        // ==================== 基础设置 ====================
+        function renderBasicSettings() {
+            const thresholds = config.thresholds || {};
+            document.getElementById('switch-pii').checked = thresholds.pii?.enabled !== false;
+            document.getElementById('switch-keywords').checked = thresholds.keywords?.enabled !== false;
+            document.getElementById('switch-injection').checked = thresholds.injection?.enabled !== false;
+            document.getElementById('switch-output').checked = thresholds.output?.enabled !== false;
+            document.getElementById('global-block-level').value = thresholds.pii?.block_level || 'critical';
+            document.getElementById('global-manual-level').value = thresholds.pii?.manual_level || 'high';
+            document.getElementById('switch-system-notify').checked = config.notifications?.system_enabled !== false;
+        }
+
+        function applyGlobalThreshold() {
+            const blockLevel = document.getElementById('global-block-level').value;
+            const manualLevel = document.getElementById('global-manual-level').value;
+            
+            ['pii', 'keywords', 'injection', 'output'].forEach(key => {
+                if (!config.thresholds) config.thresholds = {};
+                if (!config.thresholds[key]) config.thresholds[key] = {};
+                config.thresholds[key].block_level = blockLevel;
+                config.thresholds[key].manual_level = manualLevel;
+            });
+            
+            renderAdvancedSettings();
+            alert(i18n[currentLang]['msg-applied']);
+        }
+
+        async function saveBasicSettings() {
+            config.thresholds = config.thresholds || {};
+            config.thresholds.pii = config.thresholds.pii || {};
+            config.thresholds.keywords = config.thresholds.keywords || {};
+            config.thresholds.injection = config.thresholds.injection || {};
+            config.thresholds.output = config.thresholds.output || {};
+            
+            config.thresholds.pii.enabled = document.getElementById('switch-pii').checked;
+            config.thresholds.keywords.enabled = document.getElementById('switch-keywords').checked;
+            config.thresholds.injection.enabled = document.getElementById('switch-injection').checked;
+            config.thresholds.output.enabled = document.getElementById('switch-output').checked;
+            
+            config.thresholds.pii.block_level = document.getElementById('global-block-level').value;
+            config.thresholds.pii.manual_level = document.getElementById('global-manual-level').value;
+            config.thresholds.keywords.block_level = document.getElementById('global-block-level').value;
+            config.thresholds.keywords.manual_level = document.getElementById('global-manual-level').value;
+            config.thresholds.injection.block_level = document.getElementById('global-block-level').value;
+            config.thresholds.injection.manual_level = document.getElementById('global-manual-level').value;
+            config.thresholds.output.block_level = document.getElementById('global-block-level').value;
+            config.thresholds.output.manual_level = document.getElementById('global-manual-level').value;
+            
+            config.notifications = { system_enabled: document.getElementById('switch-system-notify').checked };
+            
+            await apiCall('/api/config', 'PUT', config);
+            alert(i18n[currentLang]['msg-saved']);
+        }
+
+        // ==================== 高级设置 ====================
+        function renderAdvancedSettings() {
+            renderThresholdSettings();
+            renderTsParams();
+        }
+
+        function renderThresholdSettings() {
+            const container = document.getElementById('threshold-settings');
+            const thresholds = config.thresholds || {};
+            const categories = ['pii', 'keywords', 'injection', 'output'];
+            
+            container.innerHTML = categories.map(cat => `
+                <div class="form-row" style="margin-bottom: 15px;">
+                    <label style="width: 100px;">${cat.toUpperCase()}</label>
+                    <select id="threshold-${cat}-block" style="width: 120px;">
+                        <option value="low" ${thresholds[cat]?.block_level === 'low' ? 'selected' : ''}>low</option>
+                        <option value="medium" ${thresholds[cat]?.block_level === 'medium' ? 'selected' : ''}>medium</option>
+                        <option value="high" ${thresholds[cat]?.block_level === 'high' ? 'selected' : ''}>high</option>
+                        <option value="critical" ${thresholds[cat]?.block_level === 'critical' || !thresholds[cat]?.block_level ? 'selected' : ''}>critical</option>
+                    </select>
+                    <select id="threshold-${cat}-manual" style="width: 120px;">
+                        <option value="low" ${thresholds[cat]?.manual_level === 'low' ? 'selected' : ''}>low</option>
+                        <option value="medium" ${thresholds[cat]?.manual_level === 'medium' ? 'selected' : ''}>medium</option>
+                        <option value="high" ${thresholds[cat]?.manual_level === 'high' || !thresholds[cat]?.manual_level ? 'selected' : ''}>high</option>
+                        <option value="critical" ${thresholds[cat]?.manual_level === 'critical' ? 'selected' : ''}>critical</option>
+                    </select>
+                    <label class="switch">
+                        <input type="checkbox" id="threshold-${cat}-enabled" ${thresholds[cat]?.enabled !== false ? 'checked' : ''}>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            `).join('');
+        }
+
+        function renderTsParams() {
+            const container = document.getElementById('ts-params-settings');
+            const params = config.ts_params || {};
+            
+            container.innerHTML = `
+                <div class="form-group">
+                    <label>高危命令模式</label>
+                    <div class="tag-input-container" id="tag-high-risk-patterns">
+                        ${(params.high_risk_patterns || []).map(p => `
+                            <span class="tag-item">${p} <span class="remove-tag" onclick="removeTag('high_risk_patterns', '${p}')">&times;</span></span>
+                        `).join('')}
+                        <input class="tag-input" placeholder="添加..." onkeydown="handleTagInput(event, 'high_risk_patterns')">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>高危工具</label>
+                    <div class="tag-input-container" id="tag-high-risk-tools">
+                        ${(params.high_risk_tools || []).map(t => `
+                            <span class="tag-item">${t} <span class="remove-tag" onclick="removeTag('high_risk_tools', '${t}')">&times;</span></span>
+                        `).join('')}
+                        <input class="tag-input" placeholder="添加..." onkeydown="handleTagInput(event, 'high_risk_tools')">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>中危工具</label>
+                    <div class="tag-input-container" id="tag-medium-risk-tools">
+                        ${(params.medium_risk_tools || []).map(t => `
+                            <span class="tag-item">${t} <span class="remove-tag" onclick="removeTag('medium_risk_tools', '${t}')">&times;</span></span>
+                        `).join('')}
+                        <input class="tag-input" placeholder="添加..." onkeydown="handleTagInput(event, 'medium_risk_tools')">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Phase D阈值</label>
+                    <div class="form-row">
+                        <label>高危工具次数:</label>
+                        <input type="number" id="phase-d-high-risk" value="${params.phase_d_thresholds?.high_risk_tool_count || 10}" style="width: 80px;">
+                        <label>敏感路径次数:</label>
+                        <input type="number" id="phase-d-sensitive" value="${params.phase_d_thresholds?.sensitive_path_count || 3}" style="width: 80px;">
+                    </div>
+                </div>
+            `;
+        }
+
+        function removeTag(field, value) {
+            if (!config.ts_params) config.ts_params = {};
+            config.ts_params[field] = (config.ts_params[field] || []).filter(v => v !== value);
+            renderTsParams();
+        }
+
+        function handleTagInput(event, field) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                const value = event.target.value.trim();
+                if (value) {
+                    if (!config.ts_params) config.ts_params = {};
+                    if (!config.ts_params[field]) config.ts_params[field] = [];
+                    if (!config.ts_params[field].includes(value)) {
+                        config.ts_params[field].push(value);
+                    }
+                    event.target.value = '';
+                    renderTsParams();
+                }
+            }
+        }
+
+        async function saveAdvancedSettings() {
+            // 保存阈值
+            ['pii', 'keywords', 'injection', 'output'].forEach(cat => {
+                config.thresholds[cat] = {
+                    block_level: document.getElementById(`threshold-${cat}-block`).value,
+                    manual_level: document.getElementById(`threshold-${cat}-manual`).value,
+                    enabled: document.getElementById(`threshold-${cat}-enabled`).checked
+                };
+            });
+            
+            // 保存TS参数
+            config.ts_params.phase_d_thresholds = {
+                high_risk_tool_count: parseInt(document.getElementById('phase-d-high-risk').value),
+                sensitive_path_count: parseInt(document.getElementById('phase-d-sensitive').value)
+            };
+            
+            await apiCall('/api/config', 'PUT', config);
+            alert(i18n[currentLang]['msg-saved']);
+        }
+
+        async function resetToDefault() {
+            if (confirm(currentLang === 'zh' ? '确定要还原默认设置吗？' : 'Reset to default settings?')) {
+                const result = await apiCall('/api/config/reset', 'POST');
+                config = result.config;
+                renderBasicSettings();
+                renderAdvancedSettings();
+                alert(i18n[currentLang]['msg-reset']);
+            }
+        }
+
+        // ==================== 路径策略 ====================
+        function renderPathPolicy() {
+            document.getElementById('switch-learning-mode').checked = pathPolicy.learning_mode !== false;
+            renderListItems('blacklist', pathPolicy.blacklist || []);
+            renderListItems('whitelist', pathPolicy.whitelist || []);
+            renderListItems('sensitive_read_patterns', pathPolicy.sensitive_read_patterns || []);
+        }
+
+        function renderListItems(field, items) {
+            const container = document.getElementById(`${field === 'sensitive_read_patterns' ? 'sensitive' : field}-container`);
+            container.innerHTML = items.map((item, index) => `
+                <div class="list-item">
+                    <span>${item}</span>
+                    <button class="btn btn-danger btn-sm" onclick="removeListItem('${field}', ${index})">删除</button>
+                </div>
+            `).join('');
+        }
+
+        function addListItem(field) {
+            const value = prompt(currentLang === 'zh' ? '请输入路径模式:' : 'Enter path pattern:');
+            if (value) {
+                if (!pathPolicy[field]) pathPolicy[field] = [];
+                pathPolicy[field].push(value);
+                renderListItems(field, pathPolicy[field]);
+            }
+        }
+
+        function removeListItem(field, index) {
+            pathPolicy[field].splice(index, 1);
+            renderListItems(field, pathPolicy[field]);
+        }
+
+        async function savePathPolicy() {
+            pathPolicy.learning_mode = document.getElementById('switch-learning-mode').checked;
+            await apiCall('/api/path-policy', 'PUT', pathPolicy);
+            alert(i18n[currentLang]['msg-saved']);
+        }
+
+        async function resetPathPolicy() {
+            if (confirm(currentLang === 'zh' ? '确定要还原默认路径策略吗？' : 'Reset path policy to default?')) {
+                pathPolicy = await apiCall('/api/path-policy', 'PUT', {
+                    blacklist: ["/etc/**", "/boot/**", "~/.ssh/**", "~/.gnupg/**", "C:\\Windows\\**", "C:\\Program Files\\**", "**/.env", "**/credentials", "**/id_rsa", "**/*.pem"],
+                    whitelist: ["/tmp/**", "/home/*/projects/**", "~/work/**", "D:\\Git\\**", "C:\\Users\\*\\Documents\\**"],
+                    sensitive_read_patterns: ["~/.ssh/**", "~/.aws/**", "**/.env", "**/config.json", "/etc/passwd", "/etc/shadow"],
+                    learning_mode: true
+                });
+                renderPathPolicy();
+            }
+        }
+
+        // ==================== 规则管理 ====================
+        function renderRules() {
+            const container = document.getElementById('rules-content');
+            const ruleData = rules[currentTab];
+            
+            if (currentTab === 'custom') {
+                renderCustomRules(container);
+                return;
+            }
+            
+            if (!ruleData || Object.keys(ruleData).length === 0) {
+                container.innerHTML = `<p style="color: var(--text-secondary);">${i18n[currentLang]['msg-no-rules']}</p>`;
+                return;
+            }
+            
+            // 根据不同类型渲染
+            let rulesList = [];
+            if (currentTab === 'pii') rulesList = ruleData.pii_rules || [];
+            else if (currentTab === 'keywords') rulesList = ruleData.keyword_rules || [];
+            else if (currentTab === 'injection') rulesList = ruleData.injection_rules || [];
+            else if (currentTab === 'output_sensitivity') rulesList = ruleData.sensitive_output_rules || [];
+            else if (currentTab === 'response_guard') {
+                // response_guard 有特殊结构
+                renderResponseGuardRules(container, ruleData);
+                return;
+            }
+            
+            container.innerHTML = `
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>${i18n[currentLang]['th-name']}</th>
+                                <th>${i18n[currentLang]['th-pattern']}</th>
+                                <th>${i18n[currentLang]['th-level-col']}</th>
+                                <th>${i18n[currentLang]['th-actions']}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rulesList.map((rule, index) => `
+                                <tr>
+                                    <td>${rule.name || rule.category || '-'}</td>
+                                    <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${rule.pattern || (rule.keywords || []).join(', ') || '-'}</td>
+                                    <td><span class="tag tag-${rule.severity || 'low'}">${rule.severity || 'low'}</span></td>
+                                    <td><button class="btn btn-outline btn-sm" onclick="editRule(${index})">${i18n[currentLang]['btn-edit']}</button></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                <button class="btn btn-outline" style="margin-top: 15px;" onclick="addRule()">${i18n[currentLang]['btn-add-rule']}</button>
+            `;
+        }
+
+        function renderResponseGuardRules(container, data) {
+            const allRules = [];
+            if (data.phishing) allRules.push(...data.phishing);
+            if (data.leak_detection) allRules.push(...data.leak_detection);
+            
+            container.innerHTML = `
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>${i18n[currentLang]['th-name']}</th>
+                                <th>${i18n[currentLang]['th-pattern']}</th>
+                                <th>${i18n[currentLang]['th-level-col']}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${allRules.map(rule => `
+                                <tr>
+                                    <td>${rule.name || '-'}</td>
+                                    <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${rule.pattern || '-'}</td>
+                                    <td><span class="tag tag-${rule.severity || 'low'}">${rule.severity || 'low'}</span></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function renderCustomRules(container) {
+            const customRules = rules.custom?.rules || [];
+            container.innerHTML = `
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>${i18n[currentLang]['th-name']}</th>
+                                <th>${i18n[currentLang]['th-type']}</th>
+                                <th>${i18n[currentLang]['th-pattern']}</th>
+                                <th>${i18n[currentLang]['th-level-col']}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${customRules.map(rule => `
+                                <tr>
+                                    <td>${rule.name || '-'}</td>
+                                    <td>${rule.type || '-'}</td>
+                                    <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${rule.pattern || '-'}</td>
+                                    <td><span class="tag tag-${rule.severity || 'low'}">${rule.severity || 'low'}</span></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function editRule(index) {
+            alert(i18n[currentLang]['msg-dev']);
+        }
+
+        function addRule() {
+            alert(i18n[currentLang]['msg-dev']);
+        }
+
+        function importRules() {
+            document.getElementById('import-modal').classList.add('active');
+        }
+
+        function closeImportModal() {
+            document.getElementById('import-modal').classList.remove('active');
+        }
+
+        async function confirmImport() {
+            const content = document.getElementById('import-yaml-content').value;
+            try {
+                await apiCall(`/api/rules/${currentTab}/import`, 'POST', { content });
+                rules = await apiCall('/api/rules');
+                renderRules();
+                closeImportModal();
+                alert(i18n[currentLang]['msg-import-success']);
+            } catch (err) {
+                alert(i18n[currentLang]['msg-import-fail'] + ': ' + err.message);
+            }
+        }
+
+        async function exportRules() {
+            const result = await apiCall(`/api/rules/${currentTab}/export`);
+            const blob = new Blob([result.content], { type: 'text/yaml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = result.filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // ==================== Webhook管理 ====================
+        function renderWebhooks() {
+            const container = document.getElementById('webhooks-list');
+            if (webhooks.length === 0) {
+                container.innerHTML = `<p style="color: var(--text-secondary);">${i18n[currentLang]['msg-no-webhooks']}</p>`;
+                return;
+            }
+            
+            container.innerHTML = webhooks.map((wh, index) => `
+                <div class="list-item">
+                    <div>
+                        <strong>${wh.name || '-'}</strong>
+                        <div style="font-size: 12px; color: var(--text-secondary);">${wh.url}</div>
+                    </div>
+                    <div>
+                        <button class="btn btn-outline btn-sm" onclick="editWebhook(${index})">${i18n[currentLang]['btn-edit']}</button>
+                        <button class="btn btn-outline btn-sm" onclick="testWebhookById(${index})">${i18n[currentLang]['btn-test-webhook']}</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteWebhook(${index})">${i18n[currentLang]['btn-delete']}</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function showAddWebhookModal() {
+            editingWebhookIndex = -1;
+            document.getElementById('webhook-name').value = '';
+            document.getElementById('webhook-url').value = '';
+            document.getElementById('webhook-enabled').checked = true;
+            document.getElementById('webhook-modal').classList.add('active');
+        }
+
+        function editWebhook(index) {
+            editingWebhookIndex = index;
+            const wh = webhooks[index];
+            document.getElementById('webhook-name').value = wh.name || '';
+            document.getElementById('webhook-url').value = wh.url || '';
+            document.getElementById('webhook-enabled').checked = wh.enabled !== false;
+            document.getElementById('webhook-modal').classList.add('active');
+        }
+
+        function closeWebhookModal() {
+            document.getElementById('webhook-modal').classList.remove('active');
+        }
+
+        async function saveWebhook() {
+            const webhook = {
+                name: document.getElementById('webhook-name').value,
+                url: document.getElementById('webhook-url').value,
+                enabled: document.getElementById('webhook-enabled').checked
+            };
+            
+            if (editingWebhookIndex === -1) {
+                await apiCall('/api/webhooks', 'POST', webhook);
+            } else {
+                await apiCall(`/api/webhooks/${editingWebhookIndex}`, 'PUT', webhook);
+            }
+            
+            webhooks = await apiCall('/api/webhooks');
+            renderWebhooks();
+            closeWebhookModal();
+        }
+
+        async function testWebhook() {
+            const webhook = {
+                name: document.getElementById('webhook-name').value,
+                url: document.getElementById('webhook-url').value,
+                enabled: document.getElementById('webhook-enabled').checked
+            };
+            
+            // 临时保存并测试
+            if (editingWebhookIndex === -1) {
+                await apiCall('/api/webhooks', 'POST', webhook);
+                webhooks = await apiCall('/api/webhooks');
+                editingWebhookIndex = webhooks.length - 1;
+            } else {
+                await apiCall(`/api/webhooks/${editingWebhookIndex}`, 'PUT', webhook);
+            }
+            
+            try {
+                await apiCall(`/api/webhooks/${editingWebhookIndex}/test`, 'POST');
+                alert(i18n[currentLang]['msg-test-success']);
+            } catch (err) {
+                alert(i18n[currentLang]['msg-test-fail']);
+            }
+        }
+
+        async function testWebhookById(index) {
+            try {
+                await apiCall(`/api/webhooks/${index}/test`, 'POST');
+                alert(i18n[currentLang]['msg-test-success']);
+            } catch (err) {
+                alert(i18n[currentLang]['msg-test-fail']);
+            }
+        }
+
+        async function deleteWebhook(index) {
+            if (confirm(currentLang === 'zh' ? '确定要删除此Webhook吗？' : 'Delete this webhook?')) {
+                await apiCall(`/api/webhooks/${index}`, 'DELETE');
+                webhooks = await apiCall('/api/webhooks');
+                renderWebhooks();
+            }
+        }
+
+        // ==================== 日志查看 ====================
+        async function loadLogDates() {
+            const dates = await apiCall('/api/logs/dates');
+            const select = document.getElementById('log-date-filter');
+            select.innerHTML = `<option value="">${currentLang === 'zh' ? '全部日期' : 'All dates'}</option>`;
+            dates.forEach(date => {
+                select.innerHTML += `<option value="${date}">${date}</option>`;
+            });
+        }
+
+        async function loadLogs() {
+            const date = document.getElementById('log-date-filter').value;
+            const level = document.getElementById('log-level-filter').value;
+            const type = document.getElementById('log-type-filter').value;
+            
+            const logs = await apiCall(`/api/logs?date=${date}&level=${level}&type=${type}&limit=200`);
+            
+            const tbody = document.getElementById('logs-table-body');
+            if (type === 'notify') {
+                tbody.innerHTML = logs.map(log => `
+                    <tr>
+                        <td>-</td>
+                        <td>通知</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>${log.message || '-'}</td>
+                    </tr>
+                `).join('');
+            } else {
+                tbody.innerHTML = logs.map(log => {
+                    const alert = log.alerts?.[0];
+                    return `
+                        <tr>
+                            <td>${log.timestamp ? new Date(log.timestamp).toLocaleString() : '-'}</td>
+                            <td>${alert?.type || '-'}</td>
+                            <td><span class="tag tag-${alert?.severity || 'low'}">${alert?.severity || '-'}</span></td>
+                            <td>${log.action_taken || '-'}</td>
+                            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${alert?.description || '-'}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        }
+
+        function showCleanLogsModal() {
+            document.getElementById('clean-logs-modal').classList.add('active');
+        }
+
+        function closeCleanLogsModal() {
+            document.getElementById('clean-logs-modal').classList.remove('active');
+        }
+
+        async function cleanLogs() {
+            const days = parseInt(document.getElementById('retain-days').value);
+            const result = await apiCall('/api/logs/clean', 'POST', { days });
+            alert(i18n[currentLang]['msg-cleaned'] + ': ' + result.cleaned);
+            closeCleanLogsModal();
+            await loadLogDates();
+        }
+
+        // ==================== 初始化 ====================
+        init();
+    </script>
+</body>
+</html>

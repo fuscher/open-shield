@@ -1,8 +1,20 @@
+<p align="center">
+  <img src="doc/images/open-shield-origin-logo.png" width="240" alt="OpenShield Logo">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-0.1.0-blue.svg?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/license-Apache_2.0-green.svg?style=for-the-badge" alt="License">
+  <img src="https://img.shields.io/github/stars/fuscher/open-shield?style=for-the-badge" alt="Stars">
+  <img src="https://img.shields.io/github/issues/fuscher/open-shield?style=for-the-badge" alt="Issues">
+  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge" alt="PRs Welcome">
+</p>
+
 # OpenShield
 
 中文 | [English](README_en.md)
 
-为 AI Agent 设计的安全中间件，专为 [OpenCode](https://opencode.ai/) 平台打造。通过双重检测机制（输入预处理 + 执行拦截），在不影响 Agent 正常工作的前提下提供全方位安全防护。
+为 AI Agent 设计的安全中间件，专为 [OpenCode](https://opencode.ai/) 平台打造。通过双重检测机制（输入预处理 + 执行拦截），在不影响 Agent 正常工作的前提下提供安全防护。
 
 ---
 
@@ -28,7 +40,7 @@ install.bat
 chmod +x install.sh && ./install.sh
 ```
 
-安装脚本自动完成：pip 依赖安装 → 规则文件复制 → 插件注册 → Skill 注册 → 配置初始化。
+安装脚本自动完成：pip 依赖安装 → 规则文件复制 → 插件注册 → Skill 注册 → 配置初始化 → Dashboard 配置。
 
 ### 配置
 
@@ -36,8 +48,31 @@ chmod +x install.sh && ./install.sh
 
 **关键配置文件：**
 - `~/.openshield/config.json` — 主配置
+- `~/.openshield/dashboard_config.json` — Dashboard 配置（阈值/TS参数）
 - `~/.openshield/path_policy.json` — 路径黑白名单
 - `~/.openshield/service.token` — 服务认证令牌
+
+### Web 控制面板
+
+Dashboard 提供可视化配置管理，支持深色模式和中英文切换。
+
+**启动：**
+
+```cmd
+start_dashboard.bat        # Windows
+./start_dashboard.sh       # Linux / macOS
+```
+
+浏览器自动打开 http://localhost:9528，按 Ctrl+C 停止服务。
+
+**功能：**
+- 概览：服务状态、规则统计
+- 基础设置：检测开关、全局阈值
+- 高级设置：分类阈值、TS 插件参数
+- 路径策略：黑白名单管理
+- 规则管理：PII/关键词/注入/输出规则编辑
+- 通知管理：Webhook CRUD
+- 日志查看：检测日志/通知日志
 
 ### 验证
 
@@ -56,6 +91,10 @@ uninstall.bat        # Windows
 
 ---
 
+<p align="center">
+  <img src="https://skillicons.dev/icons?i=python,fastapi,flask,nodejs,pycharm" alt="Tech Stack">
+</p>
+
 ## 核心功能
 
 | 功能 | 说明 | 延迟 |
@@ -69,6 +108,7 @@ uninstall.bat        # Windows
 | **会话异常检测** | 高危工具频率、敏感路径访问等行为模式分析 | 异步 |
 | **规则热加载** | YAML 规则文件修改后自动生效，无需重启 | ~0.1ms |
 | **多渠道通知** | Windows Toast / Linux notify-send / Webhook（Slack/钉钉/飞书） | 异步 |
+| **Web 控制面板** | 可视化配置管理，深色模式，中英文切换 | — |
 
 **判定动作**：
 
@@ -105,6 +145,12 @@ BLOCK  → 直接阻断    （严重风险，桌面通知 + 日志）
 │  FastAPI + Bearer Token 认证               │
 │  PII/注入/关键词/输出敏感信息 检测           │
 │  桌面通知 + Webhook + JSONL 日志            │
+└─────────────────┬──────────────────────────┘
+                  ↓
+┌────────────────────────────────────────────┐
+│  Dashboard (localhost:9528)                │
+│  Flask 配置服务 + Web 控制面板              │
+│  可视化配置管理 + 日志查看                  │
 └────────────────────────────────────────────┘
 ```
 
@@ -114,7 +160,7 @@ BLOCK  → 直接阻断    （严重风险，桌面通知 + 日志）
 
 ## 文档
 
-完整技术文档：[OpenShield_doc.md](doc/OpenShield_doc.md)
+- 完整技术文档：[OpenShield_doc.md](doc/OpenShield_doc.md)
 
 ---
 

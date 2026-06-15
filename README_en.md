@@ -1,3 +1,15 @@
+<p align="center">
+  <img src="doc/images/open-shield-origin-logo.png" width="240" alt="OpenShield Logo">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-0.1.0-blue.svg?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/license-Apache_2.0-green.svg?style=for-the-badge" alt="License">
+  <img src="https://img.shields.io/github/stars/fuscher/open-shield?style=for-the-badge" alt="Stars">
+  <img src="https://img.shields.io/github/issues/fuscher/open-shield?style=for-the-badge" alt="Issues">
+  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge" alt="PRs Welcome">
+</p>
+
 # OpenShield
 
 [中文](README.md) | English
@@ -28,7 +40,7 @@ install.bat
 chmod +x install.sh && ./install.sh
 ```
 
-The installer automatically handles: pip dependencies → rule files → plugin registration → Skill registration → config initialization.
+The installer automatically handles: pip dependencies → rule files → plugin registration → Skill registration → config initialization → Dashboard configuration.
 
 ### Configuration
 
@@ -36,8 +48,31 @@ The installer automatically creates `~/.openshield/config.json` and `opencode.js
 
 **Key configuration files:**
 - `~/.openshield/config.json` — Main config
+- `~/.openshield/dashboard_config.json` — Dashboard config (thresholds/TS params)
 - `~/.openshield/path_policy.json` — Path blacklist/whitelist
 - `~/.openshield/service.token` — Service auth token
+
+### Web Dashboard
+
+Dashboard provides visual configuration management with dark mode and i18n support (Chinese/English).
+
+**Start:**
+
+```cmd
+start_dashboard.bat        # Windows
+./start_dashboard.sh       # Linux / macOS
+```
+
+Browser opens http://localhost:9528 automatically. Press Ctrl+C to stop.
+
+**Features:**
+- Overview: Service status, rule statistics
+- Basic Settings: Detection switches, global thresholds
+- Advanced Settings: Category thresholds, TS plugin parameters
+- Path Policy: Blacklist/whitelist management
+- Rules: PII/keyword/injection/output rule editing
+- Notifications: Webhook CRUD
+- Logs: Detection/notification log viewer
 
 ### Verify
 
@@ -56,6 +91,10 @@ uninstall.bat        # Windows
 
 ---
 
+<p align="center">
+  <img src="https://skillicons.dev/icons?i=python,fastapi,flask,nodejs,pycharm" alt="Tech Stack">
+</p>
+
 ## Core Features
 
 | Feature | Description | Latency |
@@ -69,6 +108,7 @@ uninstall.bat        # Windows
 | **Session Anomaly Detection** | Behavioral pattern analysis: high-risk tool frequency, sensitive path access | Async |
 | **Hot Rule Reloading** | YAML rule changes take effect automatically without restart | ~0.1ms |
 | **Multi-channel Notifications** | Windows Toast / Linux notify-send / Webhook (Slack/DingTalk/Feishu) | Async |
+| **Web Dashboard** | Visual config management, dark mode, Chinese/English i18n | — |
 
 **Verdict Actions:**
 
@@ -106,6 +146,12 @@ User Input
 │  FastAPI + Bearer Token Auth                    │
 │  PII / Injection / Keywords / Output Sensitivity│
 │  Desktop Notifications + Webhook + JSONL Logs   │
+└──────────────────┬─────────────────────────────┘
+                   ↓
+┌────────────────────────────────────────────────┐
+│  Dashboard (localhost:9528)                     │
+│  Flask Config Service + Web UI                  │
+│  Visual Configuration Management                │
 └────────────────────────────────────────────────┘
 ```
 
@@ -115,7 +161,7 @@ User Input
 
 ## Documentation
 
-Full technical documentation: [OpenShield_doc.md](doc/OpenShield_doc.md)
+- Full technical documentation: [OpenShield_doc.md](doc/OpenShield_doc.md)
 
 ---
 

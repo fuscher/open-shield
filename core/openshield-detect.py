@@ -35,6 +35,7 @@ class Config:
 
         self._rule_mtimes = {}
         self.webhooks = self._load_webhooks()
+        self.thresholds = self._load_thresholds()
         self._load_all_rules()
 
     def _load_service_token(self) -> Optional[str]:
@@ -64,7 +65,7 @@ class Config:
     def _check_and_reload(self) -> bool:
         """检查文件变更，自动重载。返回是否已重载"""
         changed = False
-        for name in ["pii.yaml", "keywords.yaml", "injection.yaml"]:
+        for name in ["pii.yaml", "keywords.yaml", "injection.yaml", "output_sensitivity.yaml"]:
             filepath = self.rules_dir / name
             if filepath.exists():
                 mt = filepath.stat().st_mtime
@@ -87,6 +88,23 @@ class Config:
                 if key.startswith("custom/") and key not in current_files:
                     del self._rule_mtimes[key]
                     changed = True
+        
+        # 监控dashboard_config.json（阈值配置）
+        dashboard_config = self.base_dir / "dashboard_config.json"
+        if dashboard_config.exists():
+            mt = dashboard_config.stat().st_mtime
+            if self._rule_mtimes.get("dashboard_config.json") != mt:
+                self._rule_mtimes["dashboard_config.json"] = mt
+                self.thresholds = self._load_thresholds()
+        
+        # 监控config.json（webhook配置）
+        config_json = self.base_dir / "config.json"
+        if config_json.exists():
+            mt = config_json.stat().st_mtime
+            if self._rule_mtimes.get("config.json") != mt:
+                self._rule_mtimes["config.json"] = mt
+                self.webhooks = self._load_webhooks()
+        
         if changed:
             self._load_all_rules()
         return changed
@@ -101,6 +119,27 @@ class Config:
             except Exception:
                 return []
         return []
+
+    def _load_thresholds(self) -> Dict:
+        """从dashboard_config.json加载阈值配置"""
+        config_file = self.base_dir / "dashboard_config.json"
+        if config_file.exists():
+            try:
+                with open(config_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                return data.get("thresholds", self._default_thresholds())
+            except Exception:
+                pass
+        return self._default_thresholds()
+
+    def _default_thresholds(self) -> Dict:
+        """默认阈值配置"""
+        return {
+            "pii": {"block_level": "critical", "manual_level": "high", "enabled": True},
+            "keywords": {"block_level": "critical", "manual_level": "high", "enabled": True},
+            "injection": {"block_level": "critical", "manual_level": "high", "enabled": True},
+            "output": {"block_level": "critical", "manual_level": "high", "enabled": True}
+        }
 
     def _load_custom_rules(self) -> List[Dict]:
         custom_dir = self.rules_dir / "custom"
@@ -436,6 +475,50 @@ class DetectionEngine:
         self.injection_detector = InjectionDetector(self.config.injection_rules)
         self.output_guard = OutputGuard(self.config.rules_dir)
 
+    def _determine_action(self, alerts: List[Alert]) -> str:
+        """根据配置的阈值确定动作（按alert.type分组，每组应用各自阈值，取最严格action）"""
+        if not alerts:
+            return "allow"
+        
+        # 按检测类型分组
+        groups = {"pii": [], "keywords": [], "injection": [], "output": []}
+        for a in alerts:
+            if a.type == "pii_detected":
+                groups["pii"].append(a)
+            elif a.type == "keyword_detected":
+                groups["keywords"].append(a)
+            elif a.type in ("injection_detected", "custom_rule"):
+                groups["injection"].append(a)
+            else:
+                groups["output"].append(a)
+        
+        severity_order = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+        action_order = {"allow": 0, "manual": 1, "block": 2}
+        final_action = "allow"
+        
+        for category, cat_alerts in groups.items():
+            if not cat_alerts:
+                continue
+            threshold = self.config.thresholds.get(category, {})
+            if not threshold.get("enabled", True):
+                continue
+            
+            block_level = severity_order.get(threshold.get("block_level", "critical"), 3)
+            manual_level = severity_order.get(threshold.get("manual_level", "high"), 2)
+            max_sev = max(severity_order.get(a.severity.value, 0) for a in cat_alerts)
+            
+            if max_sev >= block_level:
+                cat_action = "block"
+            elif max_sev >= manual_level:
+                cat_action = "manual"
+            else:
+                cat_action = "allow"
+            
+            if action_order[cat_action] > action_order[final_action]:
+                final_action = cat_action
+        
+        return final_action
+
     async def analyze(self, data: CaptureData) -> DetectionResult:
         if self.config._check_and_reload():
             self._reload_detectors()
@@ -458,11 +541,7 @@ class DetectionEngine:
             except Exception as e:
                 print(f"Custom rule error: {e}")
 
-        action = "allow"
-        if any(a.severity == AlertSeverity.CRITICAL for a in alerts):
-            action = "block"
-        elif any(a.severity == AlertSeverity.HIGH for a in alerts):
-            action = "manual"
+        action = self._determine_action(alerts)
 
         result = DetectionResult(
             session_id=data.session_id,
@@ -744,15 +823,15 @@ async def detect_execute(data: ExecuteDetectionRequest, background_tasks: Backgr
 async def detect_output(data: OutputDetectionRequest, background_tasks: BackgroundTasks, _: bool = Depends(verify_token)):
     """输出敏感检测 - 工具执行后输出脱敏"""
     try:
+        # 触发reload检查
+        if config._check_and_reload():
+            engine._reload_detectors()
+        
         # 使用 OutputGuard 检测并脱敏
         sanitized_content, alerts, was_modified = engine.output_guard.detect_and_sanitize(data.output_content)
 
-        # 确定动作
-        action = "allow"
-        if any(a.severity == AlertSeverity.CRITICAL for a in alerts):
-            action = "block"
-        elif any(a.severity == AlertSeverity.HIGH for a in alerts):
-            action = "manual"
+        # 使用统一的阈值判定逻辑
+        action = engine._determine_action(alerts)
 
         # 创建检测结果用于日志和通知
         result = DetectionResult(

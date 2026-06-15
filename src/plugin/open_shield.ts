@@ -186,49 +186,91 @@ function isSensitiveRead(filePath: string): boolean {
 
 // ==================== 风险检测 ====================
 
-const HIGH_RISK_PATTERNS = [
-  "rm -rf", "rm -r", "format", "reboot", "shutdown",
-  "dd if=", "mkfs", "drop table", "drop database", "truncate table",
-]
+interface TsParams {
+  high_risk_patterns: string[]
+  medium_risk_tools: string[]
+  high_risk_tools: string[]
+  safe_command_prefixes: string[]
+  phase_d_thresholds: {
+    high_risk_tool_count: number
+    sensitive_path_count: number
+  }
+  health_check_interval: number
+}
 
-const MEDIUM_RISK_TOOLS = [
-  "curl", "wget", "chmod", "chown",
-  "write", "edit", "overwrite",
-  "delete", "remove", "unlink",
-]
+// TTL缓存
+let _cachedParams: TsParams | null = null
+let _cacheTime = 0
+const CACHE_TTL = 5000 // 5秒缓存
 
-const HIGH_RISK_TOOLS = [
-  "database", "query", "execute",
-]
-
-const SAFE_COMMAND_PREFIXES = [
-  "ls", "dir", "pwd", "cat", "head", "tail", "less", "more",
-  "mkdir", "cp", "copy", "mv", "move", "touch", "ln",
-  "grep", "find", "which", "where", "whoami",
-  "date", "env", "printenv", "echo",
-  "git",
-  "npm", "npx", "yarn", "pnpm", "bun",
-  "node", "deno", "python", "python3", "pip", "pip3",
-  "cargo", "rustc", "go", "java", "javac", "tsc",
-  "eslint", "prettier", "ruff", "biome",
-  "pytest", "jest", "vitest", "mocha",
-  "docker", "kubectl", "helm",
-  "code", "vim", "nano",
-]
+function loadTsParams(): TsParams {
+  // 缓存命中则直接返回
+  if (_cachedParams && Date.now() - _cacheTime < CACHE_TTL) {
+    return _cachedParams
+  }
+  
+  const configPath = join(OPENSHIELD_DIR, "dashboard_config.json")
+  const defaults: TsParams = {
+    high_risk_patterns: ["rm -rf", "rm -r", "format", "reboot", "shutdown", "dd if=", "mkfs", "drop table", "drop database", "truncate table"],
+    medium_risk_tools: ["curl", "wget", "chmod", "chown", "write", "edit", "overwrite", "delete", "remove", "unlink"],
+    high_risk_tools: ["database", "query", "execute"],
+    safe_command_prefixes: [
+      "ls", "dir", "pwd", "cat", "head", "tail", "less", "more",
+      "mkdir", "cp", "copy", "mv", "move", "touch", "ln",
+      "grep", "find", "which", "where", "whoami",
+      "date", "env", "printenv", "echo",
+      "git",
+      "npm", "npx", "yarn", "pnpm", "bun",
+      "node", "deno", "python", "python3", "pip", "pip3",
+      "cargo", "rustc", "go", "java", "javac", "tsc",
+      "eslint", "prettier", "ruff", "biome",
+      "pytest", "jest", "vitest", "mocha",
+      "docker", "kubectl", "helm",
+      "code", "vim", "nano"
+    ],
+    phase_d_thresholds: { high_risk_tool_count: 10, sensitive_path_count: 3 },
+    health_check_interval: 60000
+  }
+  
+  try {
+    if (existsSync(configPath)) {
+      const config = JSON.parse(readFileSync(configPath, "utf-8"))
+      const tsParams = config.ts_params || {}
+      // 深合并：确保嵌套对象（如phase_d_thresholds）不丢失默认值
+      _cachedParams = {
+        ...defaults,
+        ...tsParams,
+        phase_d_thresholds: {
+          ...defaults.phase_d_thresholds,
+          ...(tsParams.phase_d_thresholds || {})
+        }
+      }
+    } else {
+      _cachedParams = defaults
+    }
+  } catch (err) {
+    console.error("[OpenShield] Failed to load ts_params:", err)
+    _cachedParams = defaults
+  }
+  
+  _cacheTime = Date.now()
+  return _cachedParams!
+}
 
 function detectToolRisk(tool: string, args: Record<string, unknown>): "low" | "medium" | "high" {
+  const params = loadTsParams()
   const toolName = (tool || "").toLowerCase()
 
   if (toolName === "bash" || toolName === "shell" || toolName === "exec") {
     const command = String(args.command || args.script || args.cmd || "").toLowerCase().trim()
     if (!command) return "low"
 
-    for (const pattern of HIGH_RISK_PATTERNS) {
+    for (const pattern of params.high_risk_patterns) {
       if (command.includes(pattern)) return "high"
     }
 
     const firstToken = command.split(/\s+/)[0]
-    if (SAFE_COMMAND_PREFIXES.includes(firstToken)) return "low"
+    if (params.safe_command_prefixes.includes(firstToken)) return "low"
 
     return "medium"
   }
@@ -236,12 +278,12 @@ function detectToolRisk(tool: string, args: Record<string, unknown>): "low" | "m
   const argsStr = JSON.stringify(args).toLowerCase()
   const command = `${toolName} ${argsStr}`
 
-  for (const pattern of HIGH_RISK_PATTERNS) {
+  for (const pattern of params.high_risk_patterns) {
     if (command.includes(pattern)) return "high"
   }
 
-  if (HIGH_RISK_TOOLS.includes(toolName)) return "high"
-  if (MEDIUM_RISK_TOOLS.includes(toolName)) return "medium"
+  if (params.high_risk_tools.includes(toolName)) return "high"
+  if (params.medium_risk_tools.includes(toolName)) return "medium"
 
   return "low"
 }
@@ -374,7 +416,7 @@ function ensureRules(projectDir: string): void {
   ensureDirSync(customDir)
 
   const srcDir = join(projectDir, "core", "rules")
-  for (const file of ["pii.yaml", "keywords.yaml", "injection.yaml"]) {
+  for (const file of ["pii.yaml", "keywords.yaml", "injection.yaml", "output_sensitivity.yaml", "response_guard.yaml"]) {
     const dest = join(rulesDir, file)
     const src = join(srcDir, file)
     if (!existsSync(dest) && existsSync(src)) {
