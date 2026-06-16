@@ -2,3 +2,4 @@ report/
 PLAN.md
 __pycache__/
 opencode.json
+.venv/

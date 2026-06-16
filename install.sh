@@ -35,11 +35,23 @@ if ! $PYTHON_CMD -c "import sys; exit(0 if sys.version_info >= (3, 9) else 1)" 2
     exit 1
 fi
 
-if ! $PYTHON_CMD -m pip --version >/dev/null 2>&1; then
-    echo "      ERROR: pip not found. Run: $PYTHON_CMD -m ensurepip"
-    exit 1
+# Create virtual environment for PEP 668 compatibility
+VENV_DIR="$SCRIPT_DIR/.venv"
+if [ ! -d "$VENV_DIR" ]; then
+    echo "      Creating virtual environment..."
+    $PYTHON_CMD -m venv "$VENV_DIR"
+    if [ ! -f "$VENV_DIR/bin/python3" ] && [ ! -f "$VENV_DIR/Scripts/python.exe" ]; then
+        echo "      ERROR: venv creation failed."
+        echo "      On Debian/Ubuntu, run: sudo apt install python3-venv"
+        exit 1
+    fi
 fi
-echo "      pip OK"
+if [ -f "$VENV_DIR/bin/python3" ]; then
+    PYTHON_CMD="$VENV_DIR/bin/python3"
+elif [ -f "$VENV_DIR/Scripts/python.exe" ]; then
+    PYTHON_CMD="$VENV_DIR/Scripts/python.exe"
+fi
+echo "      Using venv: $VENV_DIR"
 
 if [ -d "$PLUGIN_DIR" ]; then
     echo "      OpenCode config found."
