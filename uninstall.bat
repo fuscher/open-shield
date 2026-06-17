@@ -14,7 +14,7 @@ set "RULES_DIR=%DATA_DIR%\rules"
 set "LOGS_DIR=%DATA_DIR%\logs"
 set "CAPTURES_DIR=%DATA_DIR%\captures"
 
-echo [0/9] Checking if OpenCode is running...
+echo [0/11] Checking if OpenCode is running...
 tasklist /FI "IMAGENAME eq opencode.exe" 2>nul | find /I "opencode.exe" >nul
 if not errorlevel 1 (
     echo       WARNING: OpenCode appears to be running.
@@ -27,7 +27,7 @@ if not errorlevel 1 (
     )
 )
 
-echo [1/9] Removing plugin...
+echo [1/11] Removing plugin...
 if exist "%PLUGIN_FILE%" (
     del /f /q "%PLUGIN_FILE%"
     echo       Removed: %PLUGIN_FILE%
@@ -35,7 +35,7 @@ if exist "%PLUGIN_FILE%" (
     echo       Plugin not found, skipping.
 )
 
-echo [2/9] Removing Skill...
+echo [2/11] Removing Skill...
 if exist "%SKILL_DIR%" (
     rmdir /s /q "%SKILL_DIR%"
     echo       Removed: %SKILL_DIR%
@@ -43,7 +43,7 @@ if exist "%SKILL_DIR%" (
     echo       Skill not found, skipping.
 )
 
-echo [3/9] Removing plugin config...
+echo [3/11] Removing plugin config...
 if exist "%DATA_DIR%\config.json" (
     del /f /q "%DATA_DIR%\config.json"
     echo       Removed: %DATA_DIR%\config.json
@@ -51,7 +51,7 @@ if exist "%DATA_DIR%\config.json" (
     echo       Config not found, skipping.
 )
 
-echo [4/9] Removing security files...
+echo [4/11] Removing security files...
 if exist "%DATA_DIR%\path_policy.json" (
     del /f /q "%DATA_DIR%\path_policy.json"
     echo       Removed: path_policy.json
@@ -64,14 +64,14 @@ if exist "%DATA_DIR%\service.token" (
 ) else (
     echo       service.token not found, skipping.
 )
-if exist "%DATA_DIR%\config.json.backup" (
-    del /f /q "%DATA_DIR%\config.json.backup"
-    echo       Removed: config.json.backup
+if exist "%DATA_DIR%\config.json.backup*" (
+    del /f /q "%DATA_DIR%\config.json.backup*"
+    echo       Removed: config.json.backup files
 ) else (
     echo       config.json.backup not found, skipping.
 )
 
-echo [5/9] Removing Dashboard files...
+echo [5/11] Removing Dashboard files...
 if exist "%DATA_DIR%\dashboard_config.json" (
     del /f /q "%DATA_DIR%\dashboard_config.json"
     echo       Removed: dashboard_config.json
@@ -91,7 +91,7 @@ if exist "%DATA_DIR%\config.json.bak" (
     echo       config.json.bak not found, skipping.
 )
 
-echo [6/9] Cleaning up detection rules...
+echo [6/11] Cleaning up detection rules...
 echo.
 set /p "DELETE_RULES=Do you want to delete detection rules? (y/N): "
 if /i "%DELETE_RULES%"=="y" (
@@ -105,7 +105,7 @@ if /i "%DELETE_RULES%"=="y" (
     echo       Rules preserved at: %RULES_DIR%
 )
 
-echo [7/9] Cleaning up log files...
+echo [7/11] Cleaning up log files...
 echo.
 set /p "DELETE_LOGS=Do you want to delete log files? (y/N): "
 if /i "%DELETE_LOGS%"=="y" (
@@ -119,7 +119,7 @@ if /i "%DELETE_LOGS%"=="y" (
     echo       Logs preserved at: %LOGS_DIR%
 )
 
-echo [8/9] Cleaning up captured data...
+echo [8/11] Cleaning up captured data...
 echo.
 set /p "DELETE_CAPTURES=Do you want to delete captured data? (y/N): "
 if /i "%DELETE_CAPTURES%"=="y" (
@@ -133,32 +133,45 @@ if /i "%DELETE_CAPTURES%"=="y" (
     echo       Captured data preserved at: %CAPTURES_DIR%
 )
 
-echo [9/9] Uninstalling Python dependencies...
-echo.
-echo       Affected packages: fastapi uvicorn pydantic pyyaml flask
-echo       NOTE: These are common dependencies that other projects may use.
-echo.
-
-set "PYTHON_CMD="
-for %%c in (python python3) do (
-    %%c --version >nul 2>&1
-    if not errorlevel 1 set "PYTHON_CMD=%%c"
-)
-
-set /p "PIP_UNINSTALL=Do you want to uninstall them? (y/N): "
-if /i "%PIP_UNINSTALL%"=="y" (
-    if not "%PYTHON_CMD%"=="" (
-        %PYTHON_CMD% -m pip uninstall -y fastapi uvicorn pydantic pyyaml flask 2>nul
-        if not errorlevel 1 (
-            echo       Dependencies uninstalled.
-        ) else (
-            echo       Some dependencies may not have been installed.
-        )
+echo [9/11] Removing virtual environment...
+set "SCRIPT_DIR=%~dp0"
+set "VENV_DIR=%SCRIPT_DIR%.venv"
+if exist "%VENV_DIR%" (
+    echo.
+    set /p "DELETE_VENV=Do you want to delete the virtual environment (.venv)? (y/N): "
+    if /i "!DELETE_VENV!"=="y" (
+        rmdir /s /q "%VENV_DIR%"
+        echo       Removed: %VENV_DIR%
     ) else (
-        echo       Python not found, cannot uninstall. Remove manually with pip.
+        echo       Virtual environment preserved at: %VENV_DIR%
     )
 ) else (
-    echo       Dependencies preserved.
+    echo       Virtual environment not found, skipping.
+)
+
+echo [10/11] Removing project-level opencode.json...
+set "PROJECT_OPENCODE_JSON=%SCRIPT_DIR%opencode.json"
+if exist "%PROJECT_OPENCODE_JSON%" (
+    echo.
+    set /p "DELETE_OPENCODE_JSON=Do you want to delete project-level opencode.json? (y/N): "
+    if /i "!DELETE_OPENCODE_JSON!"=="y" (
+        del /f /q "%PROJECT_OPENCODE_JSON%"
+        echo       Removed: %PROJECT_OPENCODE_JSON%
+    ) else (
+        echo       opencode.json preserved.
+    )
+) else (
+    echo       opencode.json not found, skipping.
+)
+
+echo [11/11] Cleaning up empty directories...
+if exist "%DATA_DIR%" (
+    rmdir "%DATA_DIR%" 2>nul
+    if not exist "%DATA_DIR%" (
+        echo       Removed empty directory: %DATA_DIR%
+    ) else (
+        echo       %DATA_DIR% is not empty, preserved.
+    )
 )
 
 echo.

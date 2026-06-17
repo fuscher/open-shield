@@ -14,7 +14,7 @@ DATA_DIR="$HOME/.openshield/captures"
 PLUGIN_SRC="$SCRIPT_DIR/src/plugin/open_shield.ts"
 RULES_SRC="$SCRIPT_DIR/core/rules"
 
-echo "[0/7] Checking environment..."
+echo "[0/9] Checking environment..."
 
 PYTHON_CMD=""
 for cmd in python3 python; do
@@ -59,8 +59,8 @@ else
     echo "      NOTE: OpenCode config not found. Will be created on first OpenCode launch."
 fi
 
-echo "[1/7] Installing Python dependencies..."
-cd "$SCRIPT_DIR"
+echo "[1/9] Installing Python dependencies..."
+cd "$SCRIPT_DIR" || exit 1
 $PYTHON_CMD -m pip install -r core/requirements.txt
 if [ $? -ne 0 ]; then
     echo "      Retrying with Tsinghua mirror..."
@@ -75,7 +75,7 @@ else
     echo "      Dependencies ready."
 fi
 
-echo "[2/7] Copying detection rules..."
+echo "[2/9] Copying detection rules..."
 mkdir -p "$RULES_DIR/custom"
 if [ -f "$RULES_SRC/pii.yaml" ]; then
     cp "$RULES_SRC/pii.yaml" "$RULES_DIR/"
@@ -102,7 +102,7 @@ if [ -n "$(find "$RULES_SRC/custom" -maxdepth 1 -name "*.yaml" 2>/dev/null)" ]; 
     echo "      custom rules installed."
 fi
 
-echo "[3/7] Installing plugin..."
+echo "[3/9] Installing plugin..."
 mkdir -p "$PLUGIN_DIR"
 if [ -f "$PLUGIN_SRC" ]; then
     cp "$PLUGIN_SRC" "$PLUGIN_DIR/open_shield.ts"
@@ -112,7 +112,7 @@ else
     exit 1
 fi
 
-echo "[4/7] Installing Skill..."
+echo "[4/9] Installing Skill..."
 mkdir -p "$SKILL_DIR"
 if [ -f "$SCRIPT_DIR/.opencode/skills/openshield-safety/SKILL.md" ]; then
     cp "$SCRIPT_DIR/.opencode/skills/openshield-safety/SKILL.md" "$SKILL_DIR/"
@@ -121,7 +121,7 @@ else
     echo "      Skill file not found, skipping."
 fi
 
-echo "[5/7] Creating directories and config..."
+echo "[5/9] Creating directories and config..."
 mkdir -p "$DATA_DIR"
 mkdir -p "$LOGS_DIR"
 CONFIG_FILE="$HOME/.openshield/config.json"
@@ -135,7 +135,7 @@ echo "      Data dir: $DATA_DIR"
 echo "      Logs dir: $LOGS_DIR"
 echo "      Config written: $HOME/.openshield/config.json"
 
-# Phase B: Create path_policy.json
+echo "[6/9] Generating security files..."
 POLICY_FILE="$HOME/.openshield/path_policy.json"
 if [ ! -f "$POLICY_FILE" ]; then
     cat > "$POLICY_FILE" << 'EOF'
@@ -175,35 +175,39 @@ else
     echo "      Path policy already exists: $POLICY_FILE"
 fi
 
-# Phase 加固: Generate service token
+# Generate service token
 TOKEN_FILE="$HOME/.openshield/service.token"
 if [ ! -f "$TOKEN_FILE" ]; then
-    # Generate random token using openssl or /dev/urandom
     if command -v openssl >/dev/null 2>&1; then
         openssl rand -hex 32 > "$TOKEN_FILE"
     else
-        head -c 32 /dev/urandom | xxd -p > "$TOKEN_FILE"
+        head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$TOKEN_FILE"
     fi
+    chmod 600 "$TOKEN_FILE"
     echo "      Service token generated: $TOKEN_FILE"
 else
     echo "      Service token already exists: $TOKEN_FILE"
 fi
 
-echo "[6/7] Dashboard configuration"
-read -p "Enter Dashboard port (default 9528): " dashboard_port
+echo "[7/9] Dashboard configuration"
+read -rp "Enter Dashboard port (default 9528): " dashboard_port
 dashboard_port=${dashboard_port:-9528}
-# Write dashboard_config.json
+if ! [[ "$dashboard_port" =~ ^[0-9]+$ ]]; then
+    echo "      WARNING: Invalid port \"$dashboard_port\", using default 9528."
+    dashboard_port=9528
+fi
+# Write dashboard_config.json (port passed as string, converted via int() to prevent injection)
 $PYTHON_CMD -c "
 import json
 from pathlib import Path
 p = Path.home() / '.openshield' / 'dashboard_config.json'
 d = json.load(open(p)) if p.exists() else {}
-d['server_port'] = $dashboard_port
+d['server_port'] = int('$dashboard_port')
 json.dump(d, open(p, 'w'), indent=2)
 "
 echo "      Dashboard port: $dashboard_port"
 
-echo "[7/7] Installing Dashboard dependencies"
+echo "[8/9] Installing Dashboard dependencies"
 $PYTHON_CMD -m pip install -r "$SCRIPT_DIR/dashboard/requirements.txt" -q
 if [ $? -ne 0 ]; then
     echo "      Retrying with Tsinghua mirror..."
@@ -267,7 +271,7 @@ echo ""
 echo "To uninstall, run: ./uninstall.sh"
 echo ""
 
-# 生成项目级 opencode.json
+echo "[9/9] Generating project opencode.json..."
 PROJECT_OPENCODE_JSON="$SCRIPT_DIR/opencode.json"
 if [ ! -f "$PROJECT_OPENCODE_JSON" ]; then
     cat > "$PROJECT_OPENCODE_JSON" << 'EOF'

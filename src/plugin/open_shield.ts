@@ -425,7 +425,23 @@ function ensureRules(projectDir: string): void {
   }
 }
 
-function getPythonCommand(): string | null {
+function getPythonCommand(projectDir?: string): string | null {
+  if (projectDir) {
+    const venvPaths =
+      process.platform === "win32"
+        ? [join(projectDir, ".venv", "Scripts", "python.exe")]
+        : [join(projectDir, ".venv", "bin", "python3"), join(projectDir, ".venv", "bin", "python")]
+    for (const venvPy of venvPaths) {
+      if (existsSync(venvPy)) {
+        try {
+          execSync(`"${venvPy}" --version`, { stdio: "ignore" })
+          return venvPy
+        } catch {
+          // venv python broken, try next
+        }
+      }
+    }
+  }
   for (const cmd of ["python", "python3"]) {
     try {
       execSync(`"${cmd}" --version`, { stdio: "ignore" })
@@ -457,7 +473,7 @@ function startPythonService(projectDir: string): boolean {
 
     ensureRules(projectDir)
 
-    const python = getPythonCommand()
+    const python = getPythonCommand(projectDir)
     if (!python) return false
 
     spawn(python, [pyPath], { stdio: "ignore" })
