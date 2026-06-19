@@ -988,6 +988,25 @@
                     <button class="btn btn-outline btn-sm" onclick="addListItem('sensitive_read_patterns')" id="btn-add-sensitive">+ 添加</button>
                 </div>
 
+                <div class="card" id="browser-passwords-section">
+                    <div class="card-header">
+                        <span id="bp-title">浏览器密码目录保护</span>
+                        <label class="switch" style="margin-left: auto;">
+                            <input type="checkbox" id="browser-passwords-enabled" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="card-body">
+                        <p style="color: var(--text-secondary); font-size: 12px;" id="bp-desc">
+                            保护浏览器存储的账号密码，开启保护后访问这些目录将被阻断
+                        </p>
+                        <div id="browser-password-rules"></div>
+                        <button class="btn btn-outline btn-sm" onclick="addCustomBrowserRule()" id="bp-add-btn" style="margin-top: 10px;">
+                            + 添加自定义目录
+                        </button>
+                    </div>
+                </div>
+
                 <div class="btn-group">
                     <button class="btn btn-primary" onclick="savePathPolicy()" id="btn-save-path">保存策略</button>
                     <button class="btn btn-outline" onclick="resetPathPolicy()" id="btn-reset-path">还原默认</button>
@@ -1015,6 +1034,26 @@
                 </div>
 
                 <div id="rules-content"></div>
+
+                <div id="sensitive-strings-section" class="card" style="display: none; margin-top: 15px;">
+                    <div class="card-header">
+                        <span id="ss-title">自定义敏感字符串</span>
+                        <label class="switch" style="margin-left: auto;">
+                            <input type="checkbox" id="sensitive-strings-enabled" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="card-body">
+                        <p style="color: var(--text-secondary); font-size: 12px;" id="ss-desc">
+                            输入手机号、身份证号码等敏感信息，匹配的内容将被替换为 ***
+                        </p>
+                        <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                            <input type="text" id="sensitive-strings-input" placeholder="输入敏感字符串..." class="form-input">
+                            <button class="btn btn-primary btn-sm" onclick="addSensitiveString()" id="ss-add-btn">添加</button>
+                        </div>
+                        <div id="sensitive-strings-items"></div>
+                    </div>
+                </div>
 
                 <div class="btn-group">
                     <button class="btn btn-outline" onclick="importRules()" id="btn-import-rules">导入YAML</button>
@@ -1157,11 +1196,18 @@
         let currentLang = 'zh';
         let currentTheme = 'light';
         let currentTab = 'pii';
+        let currentPlatform = 'win32';
         let editingWebhookIndex = -1;
         let config = {};
         let pathPolicy = {};
         let rules = {};
         let webhooks = [];
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
 
         // ==================== API调用 ====================
         async function apiCall(url, method = 'GET', body = null) {
@@ -1186,10 +1232,20 @@
         async function init() {
             loadTheme();
             loadLang();
+            await initPlatform();
             setupNavigation();
             setupTabs();
             await loadAllData();
             checkDetectService();
+        }
+
+        async function initPlatform() {
+            try {
+                const info = await apiCall('/api/verify');
+                currentPlatform = info.platform || 'win32';
+            } catch {
+                currentPlatform = 'win32';
+            }
         }
 
         async function loadAllData() {
@@ -1384,6 +1440,12 @@
                 'msg-test-fail': '测试发送失败',
                 'msg-dev': '功能开发中...',
                 'msg-cleaned': '已清理日志文件',
+                'ss-title': '自定义敏感字符串',
+                'ss-desc': '输入手机号、身份证号码等敏感信息，匹配的内容将被替换为 ***',
+                'ss-add-btn': '添加',
+                'bp-title': '浏览器密码目录保护',
+                'bp-desc': '保护浏览器存储的账号密码，开启保护后访问这些目录将被阻断',
+                'bp-add-btn': '+ 添加自定义目录',
                 'btn-model-consistency': '模型一致性检测',
             },
             en: {
@@ -1500,6 +1562,12 @@
                 'msg-test-fail': 'Test failed',
                 'msg-dev': 'Feature in development...',
                 'msg-cleaned': 'Cleaned log files',
+                'ss-title': 'Custom Sensitive Strings',
+                'ss-desc': 'Enter sensitive strings like phone numbers or ID cards. Matched content will be replaced with ***',
+                'ss-add-btn': 'Add',
+                'bp-title': 'Browser Password Directory Protection',
+                'bp-desc': 'Protect stored browser passwords. Access to these directories will be blocked when protection is enabled.',
+                'bp-add-btn': '+ Add Custom Directory',
                 'btn-model-consistency': 'Model Consistency Check',
             }
         };
@@ -1771,6 +1839,7 @@
             renderListItems('blacklist', pathPolicy.blacklist || []);
             renderListItems('whitelist', pathPolicy.whitelist || []);
             renderListItems('sensitive_read_patterns', pathPolicy.sensitive_read_patterns || []);
+            loadBrowserPasswords();
         }
 
         function renderListItems(field, items) {
@@ -1819,14 +1888,18 @@
         function renderRules() {
             const container = document.getElementById('rules-content');
             const ruleData = rules[currentTab];
+            const ssSection = document.getElementById('sensitive-strings-section');
             
             if (currentTab === 'custom') {
                 renderCustomRules(container);
+                ssSection.style.display = 'none';
                 return;
             }
             
             if (!ruleData || Object.keys(ruleData).length === 0) {
                 container.innerHTML = `<p style="color: var(--text-secondary);">${i18n[currentLang]['msg-no-rules']}</p>`;
+                ssSection.style.display = currentTab === 'pii' ? 'block' : 'none';
+                if (currentTab === 'pii') loadSensitiveStrings();
                 return;
             }
             
@@ -1837,8 +1910,8 @@
             else if (currentTab === 'injection') rulesList = ruleData.injection_rules || [];
             else if (currentTab === 'output_sensitivity') rulesList = ruleData.sensitive_output_rules || [];
             else if (currentTab === 'response_guard') {
-                // response_guard 有特殊结构
                 renderResponseGuardRules(container, ruleData);
+                ssSection.style.display = 'none';
                 return;
             }
             
@@ -1867,6 +1940,9 @@
                 </div>
                 <button class="btn btn-outline" style="margin-top: 15px;" onclick="addRule()">${i18n[currentLang]['btn-add-rule']}</button>
             `;
+
+            ssSection.style.display = currentTab === 'pii' ? 'block' : 'none';
+            if (currentTab === 'pii') loadSensitiveStrings();
         }
 
         function renderResponseGuardRules(container, data) {
@@ -2131,6 +2207,132 @@
 
         function openProbekitLite() {
             window.open('https://www.probekitlite.top/', '_blank');
+        }
+
+        // ==================== 敏感字符串管理 ====================
+
+        async function loadSensitiveStrings() {
+            try {
+                const data = await apiCall('/api/sensitive-strings');
+                document.getElementById('sensitive-strings-enabled').checked = data.enabled !== false;
+                renderSensitiveStrings(data.items || []);
+                document.getElementById('sensitive-strings-enabled').onchange = async (e) => {
+                    const cfg = await apiCall('/api/sensitive-strings');
+                    cfg.enabled = e.target.checked;
+                    await apiCall('/api/sensitive-strings', 'PUT', cfg);
+                };
+            } catch (err) {
+                console.error('Failed to load sensitive strings:', err);
+            }
+        }
+
+        function renderSensitiveStrings(items) {
+            const container = document.getElementById('sensitive-strings-items');
+            if (items.length === 0) {
+                container.innerHTML = `<p style="color: var(--text-secondary); font-size: 12px;">${currentLang === 'zh' ? '暂无条目' : 'No items yet'}</p>`;
+                return;
+            }
+            container.innerHTML = items.map((item, index) => `
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-color);">
+                    <code>${escapeHtml(item)}</code>
+                    <button class="btn btn-danger btn-sm" onclick="removeSensitiveString(${index})">
+                        ${currentLang === 'zh' ? '删除' : 'Delete'}
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        async function addSensitiveString() {
+            const input = document.getElementById('sensitive-strings-input');
+            const value = input.value.trim();
+            if (!value) return;
+
+            const data = await apiCall('/api/sensitive-strings');
+            data.items = data.items || [];
+            if (data.items.includes(value)) {
+                alert(currentLang === 'zh' ? '该条目已存在' : 'Item already exists');
+                return;
+            }
+            data.items.push(value);
+            await apiCall('/api/sensitive-strings', 'PUT', data);
+            input.value = '';
+            renderSensitiveStrings(data.items);
+        }
+
+        async function removeSensitiveString(index) {
+            const data = await apiCall('/api/sensitive-strings');
+            data.items.splice(index, 1);
+            await apiCall('/api/sensitive-strings', 'PUT', data);
+            renderSensitiveStrings(data.items);
+        }
+
+        // ==================== 浏览器密码目录管理 ====================
+
+        async function loadBrowserPasswords() {
+            try {
+                const data = await apiCall('/api/browser-passwords');
+                document.getElementById('browser-passwords-enabled').checked = data.enabled !== false;
+                renderBrowserPasswordRules(data.rules || []);
+                document.getElementById('browser-passwords-enabled').onchange = async (e) => {
+                    const cfg = await apiCall('/api/browser-passwords');
+                    cfg.enabled = e.target.checked;
+                    await apiCall('/api/browser-passwords', 'PUT', cfg);
+                };
+            } catch (err) {
+                console.error('Failed to load browser passwords:', err);
+            }
+        }
+
+        function renderBrowserPasswordRules(rules) {
+            const container = document.getElementById('browser-password-rules');
+            if (rules.length === 0) {
+                container.innerHTML = `<p style="color: var(--text-secondary); font-size: 12px;">${currentLang === 'zh' ? '暂无规则' : 'No rules yet'}</p>`;
+                return;
+            }
+            container.innerHTML = rules.map((rule, index) => `
+                <div style="display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border-color);">
+                    <span style="font-weight: 500; min-width: 60px;">${escapeHtml(rule.browser)}</span>
+                    <code style="flex: 1; font-size: 12px; color: var(--text-secondary);">${escapeHtml(rule.patterns[currentPlatform] || 'N/A')}</code>
+                    <select onchange="updateBrowserRuleAction(${index}, this.value)" style="min-width: 80px; padding: 2px 4px;">
+                        <option value="allow" ${rule.action === 'allow' ? 'selected' : ''}>${currentLang === 'zh' ? '允许' : 'Allow'}</option>
+                        <option value="block" ${rule.action === 'block' ? 'selected' : ''}>${currentLang === 'zh' ? '阻断' : 'Block'}</option>
+                    </select>
+                    ${rule.custom ? `<button class="btn btn-danger btn-sm" onclick="removeBrowserRule(${index})">${currentLang === 'zh' ? '删除' : 'Delete'}</button>` : ''}
+                </div>
+            `).join('');
+        }
+
+        async function updateBrowserRuleAction(index, action) {
+            const data = await apiCall('/api/browser-passwords');
+            data.rules[index].action = action;
+            await apiCall('/api/browser-passwords', 'PUT', data);
+        }
+
+        async function addCustomBrowserRule() {
+            const browser = prompt(currentLang === 'zh' ? '输入浏览器名称' : 'Enter browser name');
+            if (!browser) return;
+
+            const pattern = prompt(currentLang === 'zh' ? '输入路径模式（支持 * 通配符）' : 'Enter path pattern (supports * wildcard)');
+            if (!pattern) return;
+
+            const data = await apiCall('/api/browser-passwords');
+            data.rules = data.rules || [];
+            data.rules.push({
+                browser: browser,
+                patterns: { [currentPlatform]: pattern },
+                action: "block",
+                custom: true,
+                description: `${browser} ${currentLang === 'zh' ? '自定义目录' : 'custom directory'}`
+            });
+            await apiCall('/api/browser-passwords', 'PUT', data);
+            renderBrowserPasswordRules(data.rules);
+        }
+
+        async function removeBrowserRule(index) {
+            const data = await apiCall('/api/browser-passwords');
+            data.rules.splice(index, 1);
+            await apiCall('/api/browser-passwords', 'PUT', data);
+            renderBrowserPasswordRules(data.rules);
         }
 
         // ==================== 初始化 ====================

@@ -5,6 +5,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import json
 import os
+import sys
 import tempfile
 import shutil
 import urllib.request
@@ -158,6 +159,58 @@ def update_path_policy():
     save_json("path_policy.json", request.json)
     return jsonify({"status": "ok"})
 
+# ==================== 敏感字符串API ====================
+
+@app.route("/api/sensitive-strings", methods=["GET"])
+def get_sensitive_strings():
+    rules = load_yaml("rules/pii.yaml")
+    return jsonify(rules.get("sensitive_strings", {"enabled": True, "items": []}))
+
+@app.route("/api/sensitive-strings", methods=["PUT"])
+def update_sensitive_strings():
+    data = request.json
+    if not isinstance(data, dict):
+        return jsonify({"status": "error", "message": "Invalid data format"}), 400
+    items = data.get("items", [])
+    if not isinstance(items, list):
+        return jsonify({"status": "error", "message": "items must be a list"}), 400
+    if len(items) > 200:
+        return jsonify({"status": "error", "message": "Maximum 200 items allowed"}), 400
+    valid_items = list(dict.fromkeys(
+        item.strip() for item in items if item and isinstance(item, str) and item.strip()
+    ))
+    data["items"] = valid_items
+
+    rules = load_yaml("rules/pii.yaml")
+    rules["sensitive_strings"] = data
+    save_yaml("rules/pii.yaml", rules)
+    return jsonify({"status": "ok"})
+
+# ==================== 浏览器密码目录API ====================
+
+@app.route("/api/browser-passwords", methods=["GET"])
+def get_browser_passwords():
+    policy = load_json("path_policy.json", default_path_policy())
+    return jsonify(policy.get("browser_passwords", default_browser_passwords()))
+
+@app.route("/api/browser-passwords", methods=["PUT"])
+def update_browser_passwords():
+    data = request.json
+    if not isinstance(data, dict):
+        return jsonify({"status": "error", "message": "Invalid data format"}), 400
+    rules = data.get("rules", [])
+    if not isinstance(rules, list):
+        return jsonify({"status": "error", "message": "rules must be a list"}), 400
+    valid_actions = {"allow", "block"}
+    for rule in rules:
+        if rule.get("action") not in valid_actions:
+            return jsonify({"status": "error", "message": f"Invalid action: {rule.get('action')}"}), 400
+
+    policy = load_json("path_policy.json", default_path_policy())
+    policy["browser_passwords"] = data
+    save_json("path_policy.json", policy)
+    return jsonify({"status": "ok"})
+
 # ==================== Webhook API ====================
 
 @app.route("/api/webhooks", methods=["GET"])
@@ -263,7 +316,8 @@ def verify():
     return jsonify({
         "status": "ok" if all(checks.values()) else "incomplete",
         "checks": checks,
-        "missing": [k for k, v in checks.items() if not v]
+        "missing": [k for k, v in checks.items() if not v],
+        "platform": sys.platform,
     })
 
 # ==================== 检测服务状态API ====================
@@ -463,6 +517,43 @@ def default_path_policy():
         "whitelist": ["/tmp/**", "/home/*/projects/**", "~/work/**", "D:\\Git\\**", "C:\\Users\\*\\Documents\\**"],
         "sensitive_read_patterns": ["~/.ssh/**", "~/.aws/**", "**/.env", "**/config.json", "/etc/passwd", "/etc/shadow"],
         "learning_mode": True
+    }
+
+def default_browser_passwords():
+    return {
+        "enabled": True,
+        "rules": [
+            {
+                "browser": "Chrome",
+                "patterns": {
+                    "win32": "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\*\\Login Data",
+                    "darwin": "~/Library/Application Support/Google/Chrome/*/Login Data",
+                    "linux": "~/.config/google-chrome/*/Login Data"
+                },
+                "action": "block",
+                "description": "Chrome 浏览器密码数据库"
+            },
+            {
+                "browser": "Edge",
+                "patterns": {
+                    "win32": "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\*\\Login Data",
+                    "darwin": "~/Library/Application Support/Microsoft Edge/*/Login Data",
+                    "linux": "~/.config/microsoft-edge/*/Login Data"
+                },
+                "action": "block",
+                "description": "Edge 浏览器密码数据库"
+            },
+            {
+                "browser": "Firefox",
+                "patterns": {
+                    "win32": "%APPDATA%\\Mozilla\\Firefox\\Profiles\\*\\logins.json",
+                    "darwin": "~/Library/Application Support/Firefox/Profiles/*/logins.json",
+                    "linux": "~/.mozilla/firefox/*/logins.json"
+                },
+                "action": "block",
+                "description": "Firefox 浏览器密码文件"
+            }
+        ]
     }
 
 if __name__ == "__main__":

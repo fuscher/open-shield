@@ -1,22 +1,4 @@
 pii_rules:
-  - name: phone_number
-    pattern: "1[3-9]\\d{9}"
-    severity: high
-    description: "手机号码"
-    mask:
-      type: "fixed"
-      prefix: 3
-      suffix: 4
-
-  - name: id_card
-    pattern: "[1-9]\\d{5}(18|19|20)\\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\\d|3[01])\\d{3}[\\dXx]"
-    severity: critical
-    description: "身份证号码"
-    mask:
-      type: "fixed"
-      prefix: 3
-      suffix: 4
-
   - name: email
     pattern: "([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})"
     severity: medium
@@ -42,3 +24,7 @@ pii_rules:
       type: "fixed"
       prefix: 7
       suffix: 1
+
+sensitive_strings:
+  enabled: true
+  items: []

@@ -246,6 +246,42 @@ class PIIDetector:
                 "mask_suffix": mask_cfg.get("suffix", 2),
             })
 
+        ss_cfg = rules.get("sensitive_strings", {})
+        self.sensitive_strings_enabled = ss_cfg.get("enabled", True)
+        raw_items = [item for item in ss_cfg.get("items", []) if item]
+        self.sensitive_strings_items = sorted(raw_items, key=len, reverse=True)
+
+    def detect_sensitive_strings(self, content: str) -> List[dict]:
+        matches = []
+        if not self.sensitive_strings_enabled:
+            return matches
+        for item in self.sensitive_strings_items:
+            start = 0
+            while True:
+                pos = content.find(item, start)
+                if pos == -1:
+                    break
+                matches.append({
+                    "rule_name": "sensitive_strings",
+                    "matched_content": item,
+                    "position": pos,
+                    "description": f"敏感字符串: {(item[:6] + '***') if len(item) > 6 else '***'}"
+                })
+                start = pos + len(item)
+        return matches
+
+    def mask_sensitive_strings(self, content: str) -> tuple:
+        masked = content
+        count = 0
+        if not self.sensitive_strings_enabled:
+            return masked, count
+        for item in self.sensitive_strings_items:
+            occurrences = masked.count(item)
+            if occurrences > 0:
+                masked = masked.replace(item, "***")
+                count += occurrences
+        return masked, count
+
     def detect(self, content: str) -> List[Alert]:
         alerts = []
         for pattern in self.patterns:
@@ -543,6 +579,10 @@ class DetectionEngine:
 
         action = self._determine_action(alerts)
 
+        ss_matches = self.pii_detector.detect_sensitive_strings(data.content)
+        if ss_matches:
+            print(f"[SensitiveStrings] matched {len(ss_matches)} occurrence(s)")
+
         result = DetectionResult(
             session_id=data.session_id,
             timestamp=datetime.now().isoformat(),
@@ -552,6 +592,10 @@ class DetectionEngine:
 
         if data.content_type in ("text", "tool_output"):
             sanitized, mask_count = self.pii_detector.mask(data.content)
+
+            sanitized, ss_count = self.pii_detector.mask_sensitive_strings(sanitized)
+            mask_count += ss_count
+
             if mask_count > 0:
                 result.sanitized_content = sanitized
 

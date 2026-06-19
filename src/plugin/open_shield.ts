@@ -1,4 +1,4 @@
-import { mkdirSync, writeFile, existsSync, readFileSync, copyFileSync } from "node:fs"
+import { mkdirSync, writeFile, existsSync, readFileSync, copyFileSync, statSync } from "node:fs"
 import { join, resolve, normalize } from "node:path"
 import { homedir } from "node:os"
 import { spawn, execSync } from "node:child_process"
@@ -58,28 +58,45 @@ function loadServiceToken(): string | null {
 
 // ==================== 路径策略 ====================
 
+interface BrowserPasswordRule {
+  browser: string
+  patterns: { win32: string; darwin: string; linux: string }
+  action: "allow" | "block"
+  custom?: boolean
+  description?: string
+}
+
 interface PathPolicy {
   blacklist: string[]
   whitelist: string[]
   sensitive_read_patterns: string[]
   learning_mode: boolean
+  browser_passwords?: {
+    enabled: boolean
+    rules: BrowserPasswordRule[]
+  }
 }
 
 let pathPolicy: PathPolicy | null = null
+let pathPolicyMtime: number = 0
 
 function loadPathPolicy(): PathPolicy {
-  if (pathPolicy) return pathPolicy
-
   try {
     if (existsSync(PATH_POLICY_PATH)) {
+      const currentMtime = statSync(PATH_POLICY_PATH).mtimeMs
+      if (pathPolicy && currentMtime === pathPolicyMtime) {
+        return pathPolicy
+      }
       pathPolicy = JSON.parse(readFileSync(PATH_POLICY_PATH, "utf-8"))
+      pathPolicyMtime = currentMtime
       return pathPolicy!
     }
   } catch (err) {
     console.error("[OpenShield] Failed to load path_policy.json:", err)
   }
 
-  // 默认策略
+  if (pathPolicy) return pathPolicy
+
   pathPolicy = {
     blacklist: [
       "/etc/**",
@@ -108,28 +125,83 @@ function loadPathPolicy(): PathPolicy {
       "/etc/passwd",
       "/etc/shadow"
     ],
-    learning_mode: true
+    learning_mode: true,
+    browser_passwords: {
+      enabled: true,
+      rules: [
+        {
+          browser: "Chrome",
+          patterns: {
+            win32: "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\*\\Login Data",
+            darwin: "~/Library/Application Support/Google/Chrome/*/Login Data",
+            linux: "~/.config/google-chrome/*/Login Data"
+          },
+          action: "block",
+          description: "Chrome 浏览器密码数据库"
+        },
+        {
+          browser: "Edge",
+          patterns: {
+            win32: "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\*\\Login Data",
+            darwin: "~/Library/Application Support/Microsoft Edge/*/Login Data",
+            linux: "~/.config/microsoft-edge/*/Login Data"
+          },
+          action: "block",
+          description: "Edge 浏览器密码数据库"
+        },
+        {
+          browser: "Firefox",
+          patterns: {
+            win32: "%APPDATA%\\Mozilla\\Firefox\\Profiles\\*\\logins.json",
+            darwin: "~/Library/Application Support/Firefox/Profiles/*/logins.json",
+            linux: "~/.mozilla/firefox/*/logins.json"
+          },
+          action: "block",
+          description: "Firefox 浏览器密码文件"
+        }
+      ]
+    }
   }
 
   return pathPolicy!
 }
 
+function expandEnvVariables(pattern: string): string {
+  let expanded = pattern
+
+  expanded = expanded.replace(/%([^%]+)%/g, (_, varName) => {
+    return process.env[varName] || ""
+  })
+
+  expanded = expanded.replace(/\$\{([^}]+)\}/g, (_, varName) => {
+    return process.env[varName] || ""
+  })
+
+  expanded = expanded.replace(/\$([A-Z_][A-Z0-9_]*)/g, (_, varName) => {
+    return process.env[varName] || ""
+  })
+
+  if (expanded.startsWith("~")) {
+    expanded = homedir() + expanded.slice(1)
+  }
+
+  return expanded
+}
+
 function matchPattern(pattern: string, filePath: string): boolean {
-  // 简化的通配符匹配
-  const normalizedPattern = pattern.replace(/\\/g, "/").toLowerCase()
+  const expandedPattern = expandEnvVariables(pattern)
+
+  const normalizedPattern = expandedPattern.replace(/\\/g, "/").toLowerCase()
   const normalizedPath = filePath.replace(/\\/g, "/").toLowerCase()
 
-  // 处理 ~ 展开
-  const homeDir = homedir().replace(/\\/g, "/").toLowerCase()
-  const expandedPattern = normalizedPattern.replace(/^~/, homeDir)
-
-  // 简单的通配符匹配
-  const regexPattern = expandedPattern
+  const regexPattern = normalizedPattern
     .replace(/\./g, "\\.")
-    .replace(/\*/g, ".*")
+    .replace(/\*\*/g, "{{GLOBSTAR}}")
+    .replace(/\*/g, "[^/]*")
+    .replace(/\{\{GLOBSTAR\}\}/g, ".*")
     .replace(/\?/g, ".")
 
-  const regex = new RegExp(`^${regexPattern}$`, "i")
+  const regex = new RegExp(`^${regexPattern}$`)
   return regex.test(normalizedPath)
 }
 
@@ -182,6 +254,35 @@ function isSensitiveRead(filePath: string): boolean {
   }
 
   return false
+}
+
+function checkBrowserPasswordAccess(
+  filePath: string
+): { allowed: boolean; reason?: string } {
+  const policy = loadPathPolicy()
+
+  if (!policy.browser_passwords?.enabled) {
+    return { allowed: true }
+  }
+
+  const platform = process.platform as "win32" | "darwin" | "linux"
+
+  for (const rule of policy.browser_passwords.rules) {
+    const pattern = rule.patterns[platform]
+    if (!pattern) continue
+
+    if (matchPattern(pattern, filePath)) {
+      if (rule.action === "block") {
+        return {
+          allowed: false,
+          reason: `[OpenShield] 访问被阻断：${rule.browser} 浏览器密码存储目录${rule.description ? " - " + rule.description : ""}`
+        }
+      }
+      return { allowed: true }
+    }
+  }
+
+  return { allowed: true }
 }
 
 // ==================== 风险检测 ====================
@@ -818,6 +919,15 @@ export const OpenShield = async ({ project }: { project: any }) => {
             filePath,
           })
           throw new Error(`[OpenShield] Path blocked: ${pathCheck.reason}. File: ${filePath}`)
+        }
+
+        const browserCheck = checkBrowserPasswordAccess(filePath)
+        if (!browserCheck.allowed) {
+          await log("warn", `[OpenShield] Browser password access blocked`, {
+            tool: toolName,
+            filePath,
+          })
+          throw new Error(browserCheck.reason || "[OpenShield] Browser password access blocked")
         }
 
         // 检查是否为敏感文件读取
