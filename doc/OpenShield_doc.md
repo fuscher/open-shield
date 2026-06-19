@@ -1,8 +1,8 @@
 # OpenShield 项目完整文档
 
-> **文档版本**: v3.0  
-> **最后更新**: 2026-06-15  
-> **项目状态**: Stage 1-7 已完成
+> **文档版本**: v3.1  
+> **最后更新**: 2026-06-20  
+> **项目状态**: Stage 1-10 已完成
 
 ---
 
@@ -214,6 +214,24 @@
 - `output.output` 写回有效，Phase C 实时脱敏路径可行
 - `message.updated` 流式高频触发（3-5ms 间隔），Phase A 需 throttle 机制
 
+### 3.7 Stage 10 — 自定义敏感字符串过滤 + 浏览器密码目录保护
+
+| 项目 | 内容 |
+|------|------|
+| **完成时间** | 2026-06-20 |
+| **实现状态** | 完整实现 |
+
+**核心变更**:
+
+| 功能 | 说明 |
+|------|------|
+| **移除高误报正则** | 彻底移除 `phone_number` 和 `id_card` 正则规则 |
+| **自定义敏感字符串** | Dashboard 手动输入需保护的字符串（手机号/身份证/地址），精确子串匹配 → `***` 替换 |
+| **精确替换策略** | 告警不计入 alerts（避免误阻断），按 item 长度降序，短串日志中不泄露 |
+| **浏览器密码目录保护** | 预设 Chrome/Edge/Firefox 三平台密码路径，支持 allow/block 动作 |
+| **跨平台路径解析** | `expandEnvVariables()`：%VAR% / ${VAR} / $VAR(仅大写) / ~ 全平台展开 |
+| **热加载修复** | `loadPathPolicy()` mtime 检测，文件变更时重新读取；`matchPattern` 移除冗余 `"i"` 标志 |
+
 ---
 
 ## 四、功能模块详解
@@ -224,11 +242,10 @@
 
 | 规则 | 正则模式 | 等级 | 脱敏结果示例 |
 |------|---------|------|-------------|
-| 手机号码 | `1[3-9]\d{9}` | high | `13800138000` → `138***8000` |
-| 身份证号码 | `[1-9]\d{5}(18\|19\|20)\d{2}...` | critical | `110101199001011234` → `110***1234` |
 | 邮箱地址 | `[a-zA-Z0-9._%+-]+@...` | medium | `test@example.com` → `te***@example.com` |
 | API 密钥 | `(sk-\|ak-\|key-)[a-zA-Z0-9]{20,}` | critical | `sk-abc123...` → `sk-***ghi` |
 | IP 地址 | `\b([0-9]{1,3}\.){3}[0-9]{1,3}\b` | low | `192.168.1.1` → `192.168***1` |
+| 自定义敏感字符串 | 用户输入的子串（非正则） | — | 精确子串 → `***` |
 
 #### 关键词规则 (keywords.yaml)
 
@@ -295,6 +312,7 @@ const MEDIUM_RISK_TOOLS = [
 | 黑名单 | `**/.env`, `**/credentials`, `**/*.pem` | 敏感文件，禁止操作 |
 | 白名单 | `/tmp/**`, `~/projects/**`, `D:\Git\**` | 工作目录，允许操作 |
 | 敏感读取 | `~/.ssh/**`, `~/.aws/**`, `/etc/passwd` | 读取时触发告警 |
+| 浏览器密码 | `%LOCALAPPDATA%\...\Login Data`, `~/.mozilla/.../logins.json` 等 | Chrome/Edge/Firefox 密码存储目录 |
 
 ### 4.2 判定动作
 
@@ -334,6 +352,9 @@ def mask(self, content: str) -> tuple:
 | `/api/v1/policy/path` | GET | 路径策略查询 | Stage 6 |
 | `/api/v1/health` | GET | 健康检查 | Stage 2 |
 | `/api/v1/rules` | GET | 当前规则查询（含 custom_rules） | Stage 2 |
+| `/api/sensitive-strings` | GET/PUT | 自定义敏感字符串配置 | Stage 10 |
+| `/api/browser-passwords` | GET/PUT | 浏览器密码目录保护配置 | Stage 10 |
+| `/api/verify` | GET | 系统配置校验 + 平台信息（sys.platform） | Stage 7 |
 
 > **认证**: Stage 5 起所有端点需 Bearer Token 认证（Token 存储于 `~/.openshield/service.token`）
 
@@ -564,6 +585,12 @@ open-shield/
 │   ├── Stage_5.md                     # Stage 5 误报率优化与权限交互
 │   ├── Stage_6.md                     # Stage 6 MITM 纵深防御方案
 │   ├── Stage_7.md                     # Stage 7 Web 控制面板设计方案
+│   ├── Stage_8.md                     # Stage 8 PEP 668 兼容性与 UI 优化
+│   ├── Stage_8_review.md              # Stage 8 方案审查报告
+│   ├── Stage_9.md                     # Stage 9 安装/卸载脚本审计报告
+│   ├── Stage_9_fix_report.md          # Stage 9 修复报告
+│   ├── Stage_10.md                    # Stage 10 自定义敏感字符串+浏览器密码保护方案
+│   ├── Stage_10_review.md             # Stage 10 方案审查报告
 │   └── analysis/                      # 分析与修复报告
 ├── install.bat                        # Windows 安装脚本
 ├── install.sh                         # Linux/macOS 安装脚本
@@ -751,8 +778,8 @@ chmod +x start_dashboard.sh && ./start_dashboard.sh
 | **概览** | 服务状态、规则统计、配置摘要 |
 | **基础设置** | 检测开关、全局阈值、通知开关 |
 | **高级设置** | 分类阈值、TS 插件参数（带 TTL 缓存热更新） |
-| **路径策略** | 黑白名单管理、学习模式开关 |
-| **规则管理** | PII/关键词/注入/输出/响应监控/自定义规则编辑 |
+| **路径策略** | 黑白名单管理、浏览器密码目录保护、学习模式开关 |
+| **规则管理** | PII/关键词/注入/输出/响应监控/自定义规则编辑、自定义敏感字符串管理 |
 | **通知管理** | Webhook CRUD、测试发送 |
 | **日志查看** | 检测日志/通知日志、按日期/级别筛选、清理功能 |
 
@@ -782,13 +809,14 @@ chmod +x start_dashboard.sh && ./start_dashboard.sh
 | Skill 检测依赖 LLM 理解能力 | 精度有限，Stage 4 已新增结构化输出格式、分场景检测指南和误报判断指南提升精度 |
 | Python 服务需手动安装依赖 | 不在插件中自动 `pip install`（避免权限与延迟问题） |
 | Windows Toast 需 PowerShell | 零依赖代价：弹窗需一次轻量进程 |
-| PII 检测可能误报 | Stage 4/5 优化：仅高/中风险工具输出送检 + 关键词边界匹配 |
+| PII 检测可能误报 | Stage 4/5 优化：仅高/中风险工具输出送检 + 关键词边界匹配；Stage 10 移除 phone/id_card 正则，改为自定义敏感字符串精确匹配 |
 | macOS 通知待适配 | 需要 `osascript` 或 `terminal-notifier` 方案 |
 | Phase A 存在 300-500ms 延迟 | 流式触发需 throttle，用户可能先看到原始内容再看到脱敏内容 |
 | Phase C 不覆盖所有工具 | `shell` 部分场景不触发 `tool.execute.after`，核心工具（read/write/edit/bash）均覆盖 |
 | Phase D 初期误报率较高 | 需基线数据积累，当前仅告警不阻断 |
 | `permission.asked` 是只读事件 | 不能用于阻断，所有阻断逻辑必须在 `tool.execute.before` 中实现 |
 | 中转站窃听不可防 | 传输层问题，超出客户端插件架构能力范围 |
+| 浏览器密码仅路径拦截 | 仅拦截通过 Read/Write/Edit 工具的直接路径访问，不阻止 Bash shell 命令直接读取 |
 
 ---
 
@@ -803,6 +831,9 @@ chmod +x start_dashboard.sh && ./start_dashboard.sh
 | Stage 5 权限交互 | `report/Stage_5.md` | bash 白名单分级 + permission.ask 集成 |
 | Stage 6 MITM 防御 | `report/Stage_6.md` | 中间人攻击纵深防御方案（Phase A/B/C/D） |
 | Stage 7 Web 面板 | `report/Stage_7.md` | Web 控制面板设计方案 |
+| Stage 8 兼容性与 UI | `report/Stage_8.md` | PEP 668 兼容性与 UI 优化 |
+| Stage 9 脚本审计 | `report/Stage_9.md` | 安装/卸载脚本审计报告 |
+| Stage 10 敏感字符串 | `report/Stage_10.md` | 自定义敏感字符串+浏览器密码目录保护方案 |
 | 数据持久化修复 | `report/flushSync_fix.md` | flushSync 函数 bug 修复记录 |
 | Hook 签名分析 | `report/analysis/message-updated-hook-analysis.md` | message.updated Hook 机制分析 |
 | Stage 2 回归修复 | `report/analysis/stage2-regression-fix-report.md` | 11 个问题修复详情 |
@@ -823,6 +854,7 @@ OpenShield 通过七个阶段的迭代开发，成功构建了一个完整的 AI
 5. **Stage 5** 优化权限交互：bash 白名单命令分级消除高频误报、`permission.ask` 集成用户确认 UI、关键词边界匹配、Service Token 认证
 6. **Stage 6** MITM 纵深防御：四层防御模型（响应防火墙 + 文件沙箱 + 输出脱敏 + 会话异常检测），覆盖中转站篡改回复、修改文件路径、数据外泄、长线渗透等攻击场景
 7. **Stage 7** Web 控制面板：可视化配置管理，支持阈值调整、规则编辑、路径策略、Webhook 管理、日志查看，深色模式 + 中英文切换
+8. **Stage 10** 自定义敏感字符串过滤 + 浏览器密码目录保护：移除高误报正则，改为精确子串匹配；预设 Chrome/Edge/Firefox 密码存储路径跨平台保护
 
 项目采用渐进式增强策略，本地规则始终可用，Python 引擎作为增强层按需调用。这种设计确保了即使在 Python 服务不可用的情况下，核心安全防护能力依然有效。
 

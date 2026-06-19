@@ -69,8 +69,8 @@ Browser opens http://localhost:9528 automatically. Press Ctrl+C to stop.
 - Overview: Service status, rule statistics
 - Basic Settings: Detection switches, global thresholds
 - Advanced Settings: Category thresholds, TS plugin parameters
-- Path Policy: Blacklist/whitelist management
-- Rules: PII/keyword/injection/output rule editing
+- Path Policy: Blacklist/whitelist management, browser password directory protection
+- Rules: PII/keyword/injection/output rule editing, custom sensitive string management
 - Notifications: Webhook CRUD
 - Logs: Detection/notification log viewer
 
@@ -99,10 +99,12 @@ uninstall.bat        # Windows
 
 | Feature | Description | Latency |
 |---------|-------------|---------|
-| **PII Detection & Masking** | Auto-detect and mask phone numbers, ID cards, emails, API keys, IP addresses | < 30ms |
+| **PII Detection & Masking** | Regex-based email, API key, IP address detection; custom sensitive string exact-match replacement | < 30ms |
+| **Custom Sensitive Strings** | User-defined strings (phone numbers, addresses, etc.) matched exactly and replaced by descending length | < 30ms |
 | **Prompt Injection Detection** | Instruction override, role hijacking, delimiter attacks, info extraction, encoding bypass | < 30ms |
 | **Dangerous Command Interception** | Bash command whitelist grading; high-risk ops trigger user confirmation | < 1ms |
 | **File Operation Sandbox** | Path blacklist/whitelist to prevent tampering/reading of critical system files | < 1ms |
+| **Browser Password Directory Protection** | Preset Chrome/Edge/Firefox password storage paths, cross-platform block/allow | < 1ms |
 | **Tool Output Sanitization** | Real-time masking of SSH keys, DB connection strings, JWT tokens, etc. | < 30ms |
 | **Response Content Monitoring** | Detect phishing links and social engineering in LLM replies | < 500ms |
 | **Session Anomaly Detection** | Behavioral pattern analysis: high-risk tool frequency, sensitive path access | Async |
