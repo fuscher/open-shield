@@ -676,9 +676,7 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            padding: 8px;
-            width: 36px;
-            height: 36px;
+            padding: 10px 12px;
         }
 
         .theme-btn svg {
@@ -810,7 +808,16 @@
             <div id="page-overview" class="page active">
                 <div class="page-header">
                     <h2 id="overview-title">系统概览</h2>
-                    <div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <a href="https://github.com/fuscher/open-shield" target="_blank" class="btn btn-outline"
+                           style="text-decoration: none;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                 style="vertical-align: middle; margin-right: 4px;">
+                                <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+                            </svg>
+                            GitHub
+                        </a>
                         <button class="btn btn-outline" id="btn-model-consistency" onclick="openProbekitLite()">模型一致性检测</button>
                         <button class="btn btn-outline theme-btn" id="theme-toggle"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg></button>
                         <button class="btn btn-outline" id="lang-toggle">EN</button>
@@ -1058,6 +1065,7 @@
                 <div class="btn-group">
                     <button class="btn btn-outline" onclick="importRules()" id="btn-import-rules">导入YAML</button>
                     <button class="btn btn-outline" onclick="exportRules()" id="btn-export-rules">导出YAML</button>
+                    <button class="btn btn-outline" onclick="resetRules()" id="btn-reset-rules">还原默认</button>
                 </div>
             </div>
 
@@ -1190,6 +1198,18 @@
         </div>
     </div>
 
+    <!-- 规则编辑弹窗 -->
+    <div class="modal-overlay" id="rule-modal">
+        <div class="modal">
+            <div class="modal-header" id="rule-modal-title">编辑规则</div>
+            <div id="rule-form-fields"></div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeRuleModal()" id="btn-cancel-rule">取消</button>
+                <button class="btn btn-primary" onclick="saveRule()" id="btn-save-rule">保存</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // ==================== 全局状态 ====================
         const API_TOKEN = "{{API_TOKEN}}";
@@ -1198,6 +1218,8 @@
         let currentTab = 'pii';
         let currentPlatform = 'win32';
         let editingWebhookIndex = -1;
+        let editingRuleIndex = -1;
+        let editingRuleGroup = '';
         let config = {};
         let pathPolicy = {};
         let rules = {};
@@ -1447,6 +1469,56 @@
                 'bp-desc': '保护浏览器存储的账号密码，开启保护后访问这些目录将被阻断',
                 'bp-add-btn': '+ 添加自定义目录',
                 'btn-model-consistency': '模型一致性检测',
+                'modal-title-edit-rule': '编辑规则',
+                'modal-title-add-rule': '添加规则',
+                'label-rule-name': '名称',
+                'label-rule-category': '分类名',
+                'label-rule-pattern': '正则模式',
+                'label-rule-severity': '严重级别',
+                'label-rule-description': '描述',
+                'label-keywords': '关键词（每行一个）',
+                'label-patterns': '匹配模式（每行一个）',
+                'label-strategy': '处理策略',
+                'label-replacement': '替换文本',
+                'label-mask-prefix-chars': '前缀保留字符数',
+                'label-mask-suffix-chars': '后缀保留字符数',
+                'label-mask-type': '脱敏类型',
+                'label-mask-prefix': '前缀保留',
+                'label-mask-suffix': '后缀保留',
+                'label-group': '检测分组',
+                'label-custom-type': '规则类型',
+                'btn-cancel-rule': '取消',
+                'btn-save-rule': '保存',
+                'msg-save-success': '规则保存成功',
+                'msg-save-fail': '规则保存失败',
+                'msg-delete-confirm': '确定要删除此规则吗？',
+                'msg-invalid-regex': '正则表达式格式无效',
+                'msg-name-required': '名称不能为空',
+                'msg-field-required': '必填字段不能为空',
+                'btn-reset-rules': '还原默认',
+                'msg-reset-rules-confirm': '确定要将当前规则类型还原为默认设置吗？所有修改将丢失。',
+                'msg-reset-rules-success': '已还原为默认规则',
+                'msg-reset-rules-fail': '还原失败',
+                'label-high-risk-patterns': '高危命令模式',
+                'label-high-risk-tools': '高危工具',
+                'label-medium-risk-tools': '中危工具',
+                'label-phase-d-threshold': 'Phase D阈值',
+                'label-high-risk-count': '高危工具次数:',
+                'label-sensitive-path-count': '敏感路径次数:',
+                'placeholder-add': '添加...',
+                'log-type-notify': '通知',
+                'msg-confirm-reset': '确定要还原默认设置吗？',
+                'msg-confirm-reset-path': '确定要还原默认路径策略吗？',
+                'msg-confirm-delete-webhook': '确定要删除此Webhook吗？',
+                'prompt-path-pattern': '请输入路径模式:',
+                'msg-no-items': '暂无条目',
+                'msg-item-exists': '该条目已存在',
+                'msg-no-browser-rules': '暂无规则',
+                'label-allow': '允许',
+                'label-block': '阻断',
+                'prompt-browser-name': '输入浏览器名称',
+                'prompt-browser-path': '输入路径模式（支持 * 通配符）',
+                'label-custom-directory': '自定义目录',
             },
             en: {
                 'app-title': 'OpenShield',
@@ -1569,6 +1641,56 @@
                 'bp-desc': 'Protect stored browser passwords. Access to these directories will be blocked when protection is enabled.',
                 'bp-add-btn': '+ Add Custom Directory',
                 'btn-model-consistency': 'Model Consistency Check',
+                'modal-title-edit-rule': 'Edit Rule',
+                'modal-title-add-rule': 'Add Rule',
+                'label-rule-name': 'Name',
+                'label-rule-category': 'Category Name',
+                'label-rule-pattern': 'Regex Pattern',
+                'label-rule-severity': 'Severity',
+                'label-rule-description': 'Description',
+                'label-keywords': 'Keywords (one per line)',
+                'label-patterns': 'Patterns (one per line)',
+                'label-strategy': 'Strategy',
+                'label-replacement': 'Replacement',
+                'label-mask-prefix-chars': 'Prefix Chars to Keep',
+                'label-mask-suffix-chars': 'Suffix Chars to Keep',
+                'label-mask-type': 'Mask Type',
+                'label-mask-prefix': 'Prefix Keep',
+                'label-mask-suffix': 'Suffix Keep',
+                'label-group': 'Detection Group',
+                'label-custom-type': 'Rule Type',
+                'btn-cancel-rule': 'Cancel',
+                'btn-save-rule': 'Save',
+                'msg-save-success': 'Rule saved successfully',
+                'msg-save-fail': 'Failed to save rule',
+                'msg-delete-confirm': 'Are you sure you want to delete this rule?',
+                'msg-invalid-regex': 'Invalid regex pattern',
+                'msg-name-required': 'Name is required',
+                'msg-field-required': 'Required field cannot be empty',
+                'btn-reset-rules': 'Reset Default',
+                'msg-reset-rules-confirm': 'Reset this rule type to default? All changes will be lost.',
+                'msg-reset-rules-success': 'Rules reset to default',
+                'msg-reset-rules-fail': 'Reset failed',
+                'label-high-risk-patterns': 'High Risk Patterns',
+                'label-high-risk-tools': 'High Risk Tools',
+                'label-medium-risk-tools': 'Medium Risk Tools',
+                'label-phase-d-threshold': 'Phase D Threshold',
+                'label-high-risk-count': 'High Risk Count:',
+                'label-sensitive-path-count': 'Sensitive Path Count:',
+                'placeholder-add': 'Add...',
+                'log-type-notify': 'Notify',
+                'msg-confirm-reset': 'Reset to default settings?',
+                'msg-confirm-reset-path': 'Reset path policy to default?',
+                'msg-confirm-delete-webhook': 'Delete this webhook?',
+                'prompt-path-pattern': 'Enter path pattern:',
+                'msg-no-items': 'No items yet',
+                'msg-item-exists': 'Item already exists',
+                'msg-no-browser-rules': 'No rules yet',
+                'label-allow': 'Allow',
+                'label-block': 'Block',
+                'prompt-browser-name': 'Enter browser name',
+                'prompt-browser-path': 'Enter path pattern (supports * wildcard)',
+                'label-custom-directory': 'custom directory',
             }
         };
 
@@ -1743,38 +1865,38 @@
             
             container.innerHTML = `
                 <div class="form-group">
-                    <label>高危命令模式</label>
+                    <label>${i18n[currentLang]['label-high-risk-patterns']}</label>
                     <div class="tag-input-container" id="tag-high-risk-patterns">
                         ${(params.high_risk_patterns || []).map(p => `
                             <span class="tag-item">${p} <span class="remove-tag" onclick="removeTag('high_risk_patterns', '${p}')">&times;</span></span>
                         `).join('')}
-                        <input class="tag-input" placeholder="添加..." onkeydown="handleTagInput(event, 'high_risk_patterns')">
+                        <input class="tag-input" placeholder="${i18n[currentLang]['placeholder-add']}" onkeydown="handleTagInput(event, 'high_risk_patterns')">
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>高危工具</label>
+                    <label>${i18n[currentLang]['label-high-risk-tools']}</label>
                     <div class="tag-input-container" id="tag-high-risk-tools">
                         ${(params.high_risk_tools || []).map(t => `
                             <span class="tag-item">${t} <span class="remove-tag" onclick="removeTag('high_risk_tools', '${t}')">&times;</span></span>
                         `).join('')}
-                        <input class="tag-input" placeholder="添加..." onkeydown="handleTagInput(event, 'high_risk_tools')">
+                        <input class="tag-input" placeholder="${i18n[currentLang]['placeholder-add']}" onkeydown="handleTagInput(event, 'high_risk_tools')">
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>中危工具</label>
+                    <label>${i18n[currentLang]['label-medium-risk-tools']}</label>
                     <div class="tag-input-container" id="tag-medium-risk-tools">
                         ${(params.medium_risk_tools || []).map(t => `
                             <span class="tag-item">${t} <span class="remove-tag" onclick="removeTag('medium_risk_tools', '${t}')">&times;</span></span>
                         `).join('')}
-                        <input class="tag-input" placeholder="添加..." onkeydown="handleTagInput(event, 'medium_risk_tools')">
+                        <input class="tag-input" placeholder="${i18n[currentLang]['placeholder-add']}" onkeydown="handleTagInput(event, 'medium_risk_tools')">
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Phase D阈值</label>
+                    <label>${i18n[currentLang]['label-phase-d-threshold']}</label>
                     <div class="form-row">
-                        <label>高危工具次数:</label>
+                        <label>${i18n[currentLang]['label-high-risk-count']}</label>
                         <input type="number" id="phase-d-high-risk" value="${params.phase_d_thresholds?.high_risk_tool_count || 10}" style="width: 80px;">
-                        <label>敏感路径次数:</label>
+                        <label>${i18n[currentLang]['label-sensitive-path-count']}</label>
                         <input type="number" id="phase-d-sensitive" value="${params.phase_d_thresholds?.sensitive_path_count || 3}" style="width: 80px;">
                     </div>
                 </div>
@@ -1824,7 +1946,7 @@
         }
 
         async function resetToDefault() {
-            if (confirm(currentLang === 'zh' ? '确定要还原默认设置吗？' : 'Reset to default settings?')) {
+            if (confirm(i18n[currentLang]['msg-confirm-reset'])) {
                 const result = await apiCall('/api/config/reset', 'POST');
                 config = result.config;
                 renderBasicSettings();
@@ -1847,13 +1969,13 @@
             container.innerHTML = items.map((item, index) => `
                 <div class="list-item">
                     <span>${item}</span>
-                    <button class="btn btn-danger btn-sm" onclick="removeListItem('${field}', ${index})">删除</button>
+                    <button class="btn btn-danger btn-sm" onclick="removeListItem('${field}', ${index})">${i18n[currentLang]['btn-delete']}</button>
                 </div>
             `).join('');
         }
 
         function addListItem(field) {
-            const value = prompt(currentLang === 'zh' ? '请输入路径模式:' : 'Enter path pattern:');
+            const value = prompt(i18n[currentLang]['prompt-path-pattern']);
             if (value) {
                 if (!pathPolicy[field]) pathPolicy[field] = [];
                 pathPolicy[field].push(value);
@@ -1873,7 +1995,7 @@
         }
 
         async function resetPathPolicy() {
-            if (confirm(currentLang === 'zh' ? '确定要还原默认路径策略吗？' : 'Reset path policy to default?')) {
+            if (confirm(i18n[currentLang]['msg-confirm-reset-path'])) {
                 pathPolicy = await apiCall('/api/path-policy', 'PUT', {
                     blacklist: ["/etc/**", "/boot/**", "~/.ssh/**", "~/.gnupg/**", "C:\\Windows\\**", "C:\\Program Files\\**", "**/.env", "**/credentials", "**/id_rsa", "**/*.pem"],
                     whitelist: ["/tmp/**", "/home/*/projects/**", "~/work/**", "D:\\Git\\**", "C:\\Users\\*\\Documents\\**"],
@@ -1929,10 +2051,13 @@
                         <tbody>
                             ${rulesList.map((rule, index) => `
                                 <tr>
-                                    <td>${rule.name || rule.category || '-'}</td>
-                                    <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${rule.pattern || (rule.keywords || []).join(', ') || '-'}</td>
+                                    <td>${escapeHtml(rule.name || rule.category || '-')}</td>
+                                    <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(rule.pattern || (rule.keywords || []).join(', ') || '-')}</td>
                                     <td><span class="tag tag-${rule.severity || 'low'}">${rule.severity || 'low'}</span></td>
-                                    <td><button class="btn btn-outline btn-sm" onclick="editRule(${index})">${i18n[currentLang]['btn-edit']}</button></td>
+                                    <td>
+                                        <button class="btn btn-outline btn-sm" onclick="editRule(${index})">${i18n[currentLang]['btn-edit']}</button>
+                                        <button class="btn btn-danger btn-sm" onclick="deleteRule(${index})">${i18n[currentLang]['btn-delete']}</button>
+                                    </td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -1946,10 +2071,26 @@
         }
 
         function renderResponseGuardRules(container, data) {
-            const allRules = [];
-            if (data.phishing) allRules.push(...data.phishing);
-            if (data.leak_detection) allRules.push(...data.leak_detection);
-            
+            const groups = ['phishing', 'leak_detection'];
+            let tableRows = '';
+
+            groups.forEach(group => {
+                (data[group] || []).forEach((rule, index) => {
+                    tableRows += `
+                        <tr>
+                            <td>${escapeHtml(rule.name || '-')}</td>
+                            <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(rule.pattern || '-')}</td>
+                            <td><span class="tag tag-${rule.severity || 'low'}">${rule.severity || 'low'}</span></td>
+                            <td>${group}</td>
+                            <td>
+                                <button class="btn btn-outline btn-sm" onclick="editRule(${index}, '${group}')">${i18n[currentLang]['btn-edit']}</button>
+                                <button class="btn btn-danger btn-sm" onclick="deleteRule(${index}, '${group}')">${i18n[currentLang]['btn-delete']}</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            });
+
             container.innerHTML = `
                 <div class="table-container">
                     <table>
@@ -1958,19 +2099,14 @@
                                 <th>${i18n[currentLang]['th-name']}</th>
                                 <th>${i18n[currentLang]['th-pattern']}</th>
                                 <th>${i18n[currentLang]['th-level-col']}</th>
+                                <th>${i18n[currentLang]['label-group']}</th>
+                                <th>${i18n[currentLang]['th-actions']}</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            ${allRules.map(rule => `
-                                <tr>
-                                    <td>${rule.name || '-'}</td>
-                                    <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${rule.pattern || '-'}</td>
-                                    <td><span class="tag tag-${rule.severity || 'low'}">${rule.severity || 'low'}</span></td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
+                        <tbody>${tableRows}</tbody>
                     </table>
                 </div>
+                <button class="btn btn-outline" style="margin-top:15px;" onclick="addRule()">${i18n[currentLang]['btn-add-rule']}</button>
             `;
         }
 
@@ -1985,29 +2121,424 @@
                                 <th>${i18n[currentLang]['th-type']}</th>
                                 <th>${i18n[currentLang]['th-pattern']}</th>
                                 <th>${i18n[currentLang]['th-level-col']}</th>
+                                <th>${i18n[currentLang]['th-actions']}</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${customRules.map(rule => `
+                            ${customRules.map((rule, index) => `
                                 <tr>
-                                    <td>${rule.name || '-'}</td>
-                                    <td>${rule.type || '-'}</td>
-                                    <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${rule.pattern || '-'}</td>
+                                    <td>${escapeHtml(rule.name || '-')}</td>
+                                    <td>${escapeHtml(rule.type || '-')}</td>
+                                    <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(rule.pattern || '-')}</td>
                                     <td><span class="tag tag-${rule.severity || 'low'}">${rule.severity || 'low'}</span></td>
+                                    <td>
+                                        <button class="btn btn-outline btn-sm" onclick="editRule(${index})">${i18n[currentLang]['btn-edit']}</button>
+                                        <button class="btn btn-danger btn-sm" onclick="deleteRule(${index})">${i18n[currentLang]['btn-delete']}</button>
+                                    </td>
                                 </tr>
                             `).join('')}
                         </tbody>
                     </table>
                 </div>
+                <button class="btn btn-outline" style="margin-top:15px;" onclick="addRule()">${i18n[currentLang]['btn-add-rule']}</button>
             `;
         }
 
-        function editRule(index) {
-            alert(i18n[currentLang]['msg-dev']);
+        function editRule(index, group) {
+            editingRuleIndex = index;
+            editingRuleGroup = group || '';
+            const ruleData = rules[currentTab];
+            let rule = null;
+
+            if (currentTab === 'pii') {
+                rule = (ruleData.pii_rules || [])[index];
+            } else if (currentTab === 'keywords') {
+                rule = (ruleData.keyword_rules || [])[index];
+            } else if (currentTab === 'injection') {
+                rule = (ruleData.injection_rules || [])[index];
+            } else if (currentTab === 'output_sensitivity') {
+                rule = (ruleData.sensitive_output_rules || [])[index];
+            } else if (currentTab === 'response_guard') {
+                rule = (ruleData[group] || [])[index];
+            } else if (currentTab === 'custom') {
+                rule = (ruleData.rules || [])[index];
+            }
+
+            renderRuleFormFields(rule);
+            document.getElementById('rule-modal-title').textContent = i18n[currentLang]['modal-title-edit-rule'];
+            document.getElementById('btn-cancel-rule').textContent = i18n[currentLang]['btn-cancel-rule'];
+            document.getElementById('btn-save-rule').textContent = i18n[currentLang]['btn-save-rule'];
+            document.getElementById('rule-modal').classList.add('active');
         }
 
         function addRule() {
-            alert(i18n[currentLang]['msg-dev']);
+            editingRuleIndex = -1;
+            editingRuleGroup = '';
+            renderRuleFormFields(null);
+            document.getElementById('rule-modal-title').textContent = i18n[currentLang]['modal-title-add-rule'];
+            document.getElementById('btn-cancel-rule').textContent = i18n[currentLang]['btn-cancel-rule'];
+            document.getElementById('btn-save-rule').textContent = i18n[currentLang]['btn-save-rule'];
+            document.getElementById('rule-modal').classList.add('active');
+        }
+
+        async function deleteRule(index, group) {
+            if (!confirm(i18n[currentLang]['msg-delete-confirm'])) return;
+
+            const ruleData = JSON.parse(JSON.stringify(rules[currentTab]));
+
+            if (currentTab === 'pii') {
+                ruleData.pii_rules.splice(index, 1);
+            } else if (currentTab === 'keywords') {
+                ruleData.keyword_rules.splice(index, 1);
+            } else if (currentTab === 'injection') {
+                ruleData.injection_rules.splice(index, 1);
+            } else if (currentTab === 'output_sensitivity') {
+                ruleData.sensitive_output_rules.splice(index, 1);
+            } else if (currentTab === 'response_guard') {
+                ruleData[group].splice(index, 1);
+            } else if (currentTab === 'custom') {
+                ruleData.rules.splice(index, 1);
+            }
+
+            try {
+                await apiCall(`/api/rules/${currentTab}`, 'PUT', ruleData);
+                rules = await apiCall('/api/rules');
+                renderRules();
+            } catch (err) {
+                alert(i18n[currentLang]['msg-save-fail'] + ': ' + err.message);
+            }
+        }
+
+        function closeRuleModal() {
+            document.getElementById('rule-modal').classList.remove('active');
+        }
+
+        function validatePattern(pattern) {
+            try {
+                new RegExp(pattern);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function onStrategyChange() {
+            const strategy = document.getElementById('rule-strategy').value;
+            document.getElementById('field-replacement').style.display = strategy !== 'mask' ? 'block' : 'none';
+            document.getElementById('field-mask-config').style.display = strategy === 'mask' ? 'block' : 'none';
+        }
+
+        function renderRuleFormFields(rule) {
+            const container = document.getElementById('rule-form-fields');
+            const t = i18n[currentLang];
+
+            const nameLabel = currentTab === 'keywords' ? t['label-rule-category'] : t['label-rule-name'];
+            let html = `
+                <div class="form-group">
+                    <label>${nameLabel}</label>
+                    <input type="text" id="rule-name" value="${escapeHtml(rule?.name || rule?.category || '')}">
+                </div>
+                <div class="form-group">
+                    <label>${t['label-rule-severity']}</label>
+                    <select id="rule-severity">
+                        <option value="low" ${rule?.severity === 'low' ? 'selected' : ''}>low</option>
+                        <option value="medium" ${rule?.severity === 'medium' ? 'selected' : ''}>medium</option>
+                        <option value="high" ${rule?.severity === 'high' ? 'selected' : ''}>high</option>
+                        <option value="critical" ${rule?.severity === 'critical' ? 'selected' : ''}>critical</option>
+                    </select>
+                </div>
+            `;
+
+            if (currentTab === 'pii') {
+                html += `
+                    <div class="form-group">
+                        <label>${t['label-rule-pattern']}</label>
+                        <input type="text" id="rule-pattern" value="${escapeHtml(rule?.pattern || '')}">
+                    </div>
+                    <div class="form-group">
+                        <label>${t['label-rule-description']}</label>
+                        <input type="text" id="rule-description" value="${escapeHtml(rule?.description || '')}">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1">
+                            <label>${t['label-mask-type']}</label>
+                            <select id="rule-mask-type">
+                                <option value="email" ${rule?.mask?.type === 'email' ? 'selected' : ''}>email</option>
+                                <option value="fixed" ${rule?.mask?.type === 'fixed' ? 'selected' : ''}>fixed</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="flex:1">
+                            <label>${t['label-mask-prefix']}</label>
+                            <input type="number" id="rule-mask-prefix" value="${rule?.mask?.prefix ?? 2}" min="0">
+                        </div>
+                        <div class="form-group" style="flex:1">
+                            <label>${t['label-mask-suffix']}</label>
+                            <input type="number" id="rule-mask-suffix" value="${rule?.mask?.suffix ?? 2}" min="0">
+                        </div>
+                    </div>
+                `;
+            } else if (currentTab === 'keywords') {
+                html += `
+                    <div class="form-group">
+                        <label>${t['label-keywords']}</label>
+                        <textarea id="rule-keywords" rows="5">${escapeHtml((rule?.keywords || []).join('\n'))}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>${t['label-rule-description']}</label>
+                        <input type="text" id="rule-description" value="${escapeHtml(rule?.description || '')}">
+                    </div>
+                `;
+            } else if (currentTab === 'injection') {
+                html += `
+                    <div class="form-group">
+                        <label>${t['label-patterns']}</label>
+                        <textarea id="rule-patterns" rows="5">${escapeHtml((rule?.patterns || []).join('\n'))}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>${t['label-rule-description']}</label>
+                        <input type="text" id="rule-description" value="${escapeHtml(rule?.description || '')}">
+                    </div>
+                `;
+            } else if (currentTab === 'output_sensitivity') {
+                const strategy = rule?.strategy || 'replace';
+                const showReplacement = strategy !== 'mask';
+                const showMaskConfig = strategy === 'mask';
+                html += `
+                    <div class="form-group">
+                        <label>${t['label-rule-pattern']}</label>
+                        <input type="text" id="rule-pattern" value="${escapeHtml(rule?.pattern || '')}">
+                    </div>
+                    <div class="form-group">
+                        <label>${t['label-strategy']}</label>
+                        <select id="rule-strategy" onchange="onStrategyChange()">
+                            <option value="replace" ${strategy === 'replace' ? 'selected' : ''}>replace</option>
+                            <option value="mask" ${strategy === 'mask' ? 'selected' : ''}>mask</option>
+                            <option value="mask_credentials" ${strategy === 'mask_credentials' ? 'selected' : ''}>mask_credentials</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="field-replacement" style="display:${showReplacement ? 'block' : 'none'}">
+                        <label>${t['label-replacement']}</label>
+                        <input type="text" id="rule-replacement" value="${escapeHtml(rule?.replacement || '')}">
+                    </div>
+                    <div id="field-mask-config" style="display:${showMaskConfig ? 'block' : 'none'}">
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1">
+                                <label>${t['label-mask-prefix-chars']}</label>
+                                <input type="number" id="rule-mask-prefix-chars" value="${rule?.mask_config?.prefix_chars ?? 4}" min="0">
+                            </div>
+                            <div class="form-group" style="flex:1">
+                                <label>${t['label-mask-suffix-chars']}</label>
+                                <input type="number" id="rule-mask-suffix-chars" value="${rule?.mask_config?.suffix_chars ?? 4}" min="0">
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else if (currentTab === 'response_guard') {
+                const group = editingRuleGroup || 'phishing';
+                html += `
+                    <div class="form-group">
+                        <label>${t['label-rule-pattern']}</label>
+                        <input type="text" id="rule-pattern" value="${escapeHtml(rule?.pattern || '')}">
+                    </div>
+                    <div class="form-group">
+                        <label>${t['label-group']}</label>
+                        <select id="rule-group">
+                            <option value="phishing" ${group === 'phishing' ? 'selected' : ''}>phishing</option>
+                            <option value="leak_detection" ${group === 'leak_detection' ? 'selected' : ''}>leak_detection</option>
+                        </select>
+                    </div>
+                `;
+            } else if (currentTab === 'custom') {
+                html += `
+                    <div class="form-group">
+                        <label>${t['label-rule-pattern']}</label>
+                        <input type="text" id="rule-pattern" value="${escapeHtml(rule?.pattern || '')}">
+                    </div>
+                    <div class="form-group">
+                        <label>${t['label-custom-type']}</label>
+                        <select id="rule-custom-type">
+                            <option value="regex" ${rule?.type === 'regex' ? 'selected' : ''}>regex</option>
+                            <option value="keyword" ${rule?.type === 'keyword' ? 'selected' : ''}>keyword</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>${t['label-rule-description']}</label>
+                        <input type="text" id="rule-description" value="${escapeHtml(rule?.description || '')}">
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+        }
+
+        async function saveRule() {
+            const ruleData = JSON.parse(JSON.stringify(rules[currentTab]));
+            const severity = document.getElementById('rule-severity').value;
+            const name = document.getElementById('rule-name').value.trim();
+
+            if (!name) {
+                alert(i18n[currentLang]['msg-name-required']);
+                return;
+            }
+
+            let newRule = {};
+
+            if (currentTab === 'pii') {
+                const pattern = document.getElementById('rule-pattern').value;
+                if (pattern && !validatePattern(pattern)) {
+                    alert(i18n[currentLang]['msg-invalid-regex']);
+                    return;
+                }
+                newRule = {
+                    name,
+                    pattern,
+                    severity,
+                    description: document.getElementById('rule-description').value,
+                    mask: {
+                        type: document.getElementById('rule-mask-type').value,
+                        prefix: parseInt(document.getElementById('rule-mask-prefix').value) || 0,
+                        suffix: parseInt(document.getElementById('rule-mask-suffix').value) || 0
+                    }
+                };
+                ruleData.pii_rules = ruleData.pii_rules || [];
+                if (editingRuleIndex === -1) {
+                    ruleData.pii_rules.push(newRule);
+                } else {
+                    ruleData.pii_rules[editingRuleIndex] = newRule;
+                }
+
+            } else if (currentTab === 'keywords') {
+                const keywords = document.getElementById('rule-keywords').value.split('\n').filter(k => k.trim());
+                if (keywords.length === 0) {
+                    alert(i18n[currentLang]['msg-field-required']);
+                    return;
+                }
+                newRule = {
+                    category: name,
+                    keywords,
+                    severity,
+                    description: document.getElementById('rule-description').value
+                };
+                ruleData.keyword_rules = ruleData.keyword_rules || [];
+                if (editingRuleIndex === -1) {
+                    ruleData.keyword_rules.push(newRule);
+                } else {
+                    ruleData.keyword_rules[editingRuleIndex] = newRule;
+                }
+
+            } else if (currentTab === 'injection') {
+                const patterns = document.getElementById('rule-patterns').value.split('\n').filter(p => p.trim());
+                if (patterns.length === 0) {
+                    alert(i18n[currentLang]['msg-field-required']);
+                    return;
+                }
+                for (const p of patterns) {
+                    if (!validatePattern(p)) {
+                        alert(i18n[currentLang]['msg-invalid-regex'] + ': ' + p);
+                        return;
+                    }
+                }
+                newRule = {
+                    name,
+                    patterns,
+                    severity,
+                    description: document.getElementById('rule-description').value
+                };
+                ruleData.injection_rules = ruleData.injection_rules || [];
+                if (editingRuleIndex === -1) {
+                    ruleData.injection_rules.push(newRule);
+                } else {
+                    ruleData.injection_rules[editingRuleIndex] = newRule;
+                }
+
+            } else if (currentTab === 'output_sensitivity') {
+                const pattern = document.getElementById('rule-pattern').value;
+                if (pattern && !validatePattern(pattern)) {
+                    alert(i18n[currentLang]['msg-invalid-regex']);
+                    return;
+                }
+                const strategy = document.getElementById('rule-strategy').value;
+                newRule = { name, pattern, severity, strategy };
+                if (strategy === 'mask') {
+                    newRule.mask_config = {
+                        prefix_chars: parseInt(document.getElementById('rule-mask-prefix-chars').value) || 4,
+                        suffix_chars: parseInt(document.getElementById('rule-mask-suffix-chars').value) || 4
+                    };
+                } else {
+                    newRule.replacement = document.getElementById('rule-replacement').value;
+                }
+                ruleData.sensitive_output_rules = ruleData.sensitive_output_rules || [];
+                if (editingRuleIndex === -1) {
+                    ruleData.sensitive_output_rules.push(newRule);
+                } else {
+                    ruleData.sensitive_output_rules[editingRuleIndex] = newRule;
+                }
+
+            } else if (currentTab === 'response_guard') {
+                const pattern = document.getElementById('rule-pattern').value;
+                if (pattern && !validatePattern(pattern)) {
+                    alert(i18n[currentLang]['msg-invalid-regex']);
+                    return;
+                }
+                const newGroup = document.getElementById('rule-group').value;
+                newRule = { name, pattern, severity };
+
+                if (editingRuleIndex === -1) {
+                    ruleData[newGroup] = ruleData[newGroup] || [];
+                    ruleData[newGroup].push(newRule);
+                } else {
+                    const oldGroup = editingRuleGroup;
+                    if (oldGroup && ruleData[oldGroup]) {
+                        ruleData[oldGroup].splice(editingRuleIndex, 1);
+                    }
+                    ruleData[newGroup] = ruleData[newGroup] || [];
+                    ruleData[newGroup].push(newRule);
+                }
+
+            } else if (currentTab === 'custom') {
+                const pattern = document.getElementById('rule-pattern').value;
+                if (pattern && !validatePattern(pattern)) {
+                    alert(i18n[currentLang]['msg-invalid-regex']);
+                    return;
+                }
+                newRule = {
+                    name,
+                    pattern,
+                    severity,
+                    type: document.getElementById('rule-custom-type').value,
+                    description: document.getElementById('rule-description').value
+                };
+                ruleData.rules = ruleData.rules || [];
+                if (editingRuleIndex === -1) {
+                    newRule._source = 'dashboard_custom.yaml';
+                    ruleData.rules.push(newRule);
+                } else {
+                    newRule._source = ruleData.rules[editingRuleIndex]._source || 'dashboard_custom.yaml';
+                    ruleData.rules[editingRuleIndex] = newRule;
+                }
+            }
+
+            try {
+                await apiCall(`/api/rules/${currentTab}`, 'PUT', ruleData);
+                rules = await apiCall('/api/rules');
+                renderRules();
+                closeRuleModal();
+                alert(i18n[currentLang]['msg-save-success']);
+            } catch (err) {
+                alert(i18n[currentLang]['msg-save-fail'] + ': ' + err.message);
+            }
+        }
+
+        async function resetRules() {
+            if (!confirm(i18n[currentLang]['msg-reset-rules-confirm'])) return;
+            try {
+                await apiCall(`/api/rules/${currentTab}/reset`, 'POST');
+                rules = await apiCall('/api/rules');
+                renderRules();
+                alert(i18n[currentLang]['msg-reset-rules-success']);
+            } catch (err) {
+                alert(i18n[currentLang]['msg-reset-rules-fail'] + ': ' + err.message);
+            }
         }
 
         function importRules() {
@@ -2138,7 +2669,7 @@
         }
 
         async function deleteWebhook(index) {
-            if (confirm(currentLang === 'zh' ? '确定要删除此Webhook吗？' : 'Delete this webhook?')) {
+            if (confirm(i18n[currentLang]['msg-confirm-delete-webhook'])) {
                 await apiCall(`/api/webhooks/${index}`, 'DELETE');
                 webhooks = await apiCall('/api/webhooks');
                 renderWebhooks();
@@ -2149,7 +2680,7 @@
         async function loadLogDates() {
             const dates = await apiCall('/api/logs/dates');
             const select = document.getElementById('log-date-filter');
-            select.innerHTML = `<option value="">${currentLang === 'zh' ? '全部日期' : 'All dates'}</option>`;
+            select.innerHTML = `<option value="">${i18n[currentLang]['opt-all-dates']}</option>`;
             dates.forEach(date => {
                 select.innerHTML += `<option value="${date}">${date}</option>`;
             });
@@ -2167,7 +2698,7 @@
                 tbody.innerHTML = logs.map(log => `
                     <tr>
                         <td>-</td>
-                        <td>通知</td>
+                        <td>${i18n[currentLang]['log-type-notify']}</td>
                         <td>-</td>
                         <td>-</td>
                         <td>${log.message || '-'}</td>
@@ -2229,14 +2760,14 @@
         function renderSensitiveStrings(items) {
             const container = document.getElementById('sensitive-strings-items');
             if (items.length === 0) {
-                container.innerHTML = `<p style="color: var(--text-secondary); font-size: 12px;">${currentLang === 'zh' ? '暂无条目' : 'No items yet'}</p>`;
+                container.innerHTML = `<p style="color: var(--text-secondary); font-size: 12px;">${i18n[currentLang]['msg-no-items']}</p>`;
                 return;
             }
             container.innerHTML = items.map((item, index) => `
                 <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-color);">
                     <code>${escapeHtml(item)}</code>
                     <button class="btn btn-danger btn-sm" onclick="removeSensitiveString(${index})">
-                        ${currentLang === 'zh' ? '删除' : 'Delete'}
+                        ${i18n[currentLang]['btn-delete']}
                     </button>
                 </div>
             `).join('');
@@ -2250,7 +2781,7 @@
             const data = await apiCall('/api/sensitive-strings');
             data.items = data.items || [];
             if (data.items.includes(value)) {
-                alert(currentLang === 'zh' ? '该条目已存在' : 'Item already exists');
+                alert(i18n[currentLang]['msg-item-exists']);
                 return;
             }
             data.items.push(value);
@@ -2286,7 +2817,7 @@
         function renderBrowserPasswordRules(rules) {
             const container = document.getElementById('browser-password-rules');
             if (rules.length === 0) {
-                container.innerHTML = `<p style="color: var(--text-secondary); font-size: 12px;">${currentLang === 'zh' ? '暂无规则' : 'No rules yet'}</p>`;
+                container.innerHTML = `<p style="color: var(--text-secondary); font-size: 12px;">${i18n[currentLang]['msg-no-browser-rules']}</p>`;
                 return;
             }
             container.innerHTML = rules.map((rule, index) => `
@@ -2294,10 +2825,10 @@
                     <span style="font-weight: 500; min-width: 60px;">${escapeHtml(rule.browser)}</span>
                     <code style="flex: 1; font-size: 12px; color: var(--text-secondary);">${escapeHtml(rule.patterns[currentPlatform] || 'N/A')}</code>
                     <select onchange="updateBrowserRuleAction(${index}, this.value)" style="min-width: 80px; padding: 2px 4px;">
-                        <option value="allow" ${rule.action === 'allow' ? 'selected' : ''}>${currentLang === 'zh' ? '允许' : 'Allow'}</option>
-                        <option value="block" ${rule.action === 'block' ? 'selected' : ''}>${currentLang === 'zh' ? '阻断' : 'Block'}</option>
+                        <option value="allow" ${rule.action === 'allow' ? 'selected' : ''}>${i18n[currentLang]['label-allow']}</option>
+                        <option value="block" ${rule.action === 'block' ? 'selected' : ''}>${i18n[currentLang]['label-block']}</option>
                     </select>
-                    ${rule.custom ? `<button class="btn btn-danger btn-sm" onclick="removeBrowserRule(${index})">${currentLang === 'zh' ? '删除' : 'Delete'}</button>` : ''}
+                    ${rule.custom ? `<button class="btn btn-danger btn-sm" onclick="removeBrowserRule(${index})">${i18n[currentLang]['btn-delete']}</button>` : ''}
                 </div>
             `).join('');
         }
@@ -2309,10 +2840,10 @@
         }
 
         async function addCustomBrowserRule() {
-            const browser = prompt(currentLang === 'zh' ? '输入浏览器名称' : 'Enter browser name');
+            const browser = prompt(i18n[currentLang]['prompt-browser-name']);
             if (!browser) return;
 
-            const pattern = prompt(currentLang === 'zh' ? '输入路径模式（支持 * 通配符）' : 'Enter path pattern (supports * wildcard)');
+            const pattern = prompt(i18n[currentLang]['prompt-browser-path']);
             if (!pattern) return;
 
             const data = await apiCall('/api/browser-passwords');
@@ -2322,7 +2853,7 @@
                 patterns: { [currentPlatform]: pattern },
                 action: "block",
                 custom: true,
-                description: `${browser} ${currentLang === 'zh' ? '自定义目录' : 'custom directory'}`
+                description: `${browser} ${i18n[currentLang]['label-custom-directory']}`
             });
             await apiCall('/api/browser-passwords', 'PUT', data);
             renderBrowserPasswordRules(data.rules);

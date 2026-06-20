@@ -14,6 +14,7 @@ import yaml
 app = Flask(__name__)
 OPENSHIELD_DIR = Path.home() / ".openshield"
 DASHBOARD_DIR = Path(__file__).parent
+DEFAULT_RULES_DIR = Path(__file__).parent.parent / "core" / "rules"
 
 # 检测服务端口（与openshield-detect.py一致）
 DETECT_SERVICE_PORT = 9527
@@ -116,7 +117,17 @@ def update_rules(rule_type):
     data = request.json
     try:
         if rule_type == "custom":
-            save_yaml("rules/custom/dashboard_custom.yaml", data)
+            file_groups = {}
+            for rule in data.get("rules", []):
+                source = rule.pop("_source", "dashboard_custom.yaml")
+                file_groups.setdefault(source, []).append(rule)
+            for filename, rules_list in file_groups.items():
+                save_yaml(f"rules/custom/{filename}", {"rules": rules_list})
+            custom_dir = OPENSHIELD_DIR / "rules" / "custom"
+            if custom_dir.exists():
+                for yaml_file in custom_dir.glob("*.yaml"):
+                    if yaml_file.name not in file_groups:
+                        save_yaml(f"rules/custom/{yaml_file.name}", {"rules": []})
         else:
             save_yaml(f"rules/{rule_type}.yaml", data)
         return jsonify({"status": "ok"})
@@ -129,6 +140,8 @@ def export_rules(rule_type):
         return jsonify({"status": "error", "message": "Invalid rule type"}), 400
     if rule_type == "custom":
         data = load_custom_rules()
+        for rule in data.get("rules", []):
+            rule.pop("_source", None)
     else:
         data = load_yaml(f"rules/{rule_type}.yaml")
     return jsonify({"filename": f"{rule_type}.yaml", "content": yaml.dump(data, allow_unicode=True)})
@@ -147,6 +160,30 @@ def import_rules(rule_type):
         return jsonify({"status": "ok", "data": data})
     except yaml.YAMLError as e:
         return jsonify({"status": "error", "message": f"YAML格式错误: {e}"}), 400
+
+@app.route("/api/rules/<rule_type>/reset", methods=["POST"])
+def reset_rules(rule_type):
+    if rule_type not in VALID_RULE_TYPES:
+        return jsonify({"status": "error", "message": "Invalid rule type"}), 400
+    try:
+        if rule_type == "custom":
+            src_dir = DEFAULT_RULES_DIR / "custom"
+            dest_dir = OPENSHIELD_DIR / "rules" / "custom"
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            for f in dest_dir.glob("*.yaml"):
+                f.unlink()
+            if src_dir.exists():
+                for f in src_dir.glob("*.yaml"):
+                    shutil.copy2(f, dest_dir / f.name)
+        else:
+            src = DEFAULT_RULES_DIR / f"{rule_type}.yaml"
+            if not src.exists():
+                return jsonify({"status": "error", "message": "Default file not found"}), 404
+            dest = OPENSHIELD_DIR / "rules" / f"{rule_type}.yaml"
+            shutil.copy2(src, dest)
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 # ==================== 路径策略API ====================
 
@@ -402,10 +439,12 @@ def load_custom_rules():
     custom_dir = OPENSHIELD_DIR / "rules" / "custom"
     rules = []
     if custom_dir.exists():
-        for yaml_file in custom_dir.glob("*.yaml"):
+        for yaml_file in sorted(custom_dir.glob("*.yaml")):
             data = load_yaml(f"rules/custom/{yaml_file.name}")
             if data and "rules" in data:
-                rules.extend(data["rules"])
+                for rule in data["rules"]:
+                    rule["_source"] = yaml_file.name
+                    rules.append(rule)
     return {"rules": rules}
 
 def read_logs(date="", level="", limit=200, log_type="detect"):

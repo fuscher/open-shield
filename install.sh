@@ -167,7 +167,42 @@ if [ ! -f "$POLICY_FILE" ]; then
     "/etc/passwd",
     "/etc/shadow"
   ],
-  "learning_mode": true
+  "learning_mode": true,
+  "browser_passwords": {
+    "enabled": true,
+    "rules": [
+      {
+        "browser": "Chrome",
+        "patterns": {
+          "win32": "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\*\\Login Data",
+          "darwin": "~/Library/Application Support/Google/Chrome/*/Login Data",
+          "linux": "~/.config/google-chrome/*/Login Data"
+        },
+        "action": "block",
+        "description": "Chrome 浏览器密码数据库"
+      },
+      {
+        "browser": "Edge",
+        "patterns": {
+          "win32": "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\*\\Login Data",
+          "darwin": "~/Library/Application Support/Microsoft Edge/*/Login Data",
+          "linux": "~/.config/microsoft-edge/*/Login Data"
+        },
+        "action": "block",
+        "description": "Edge 浏览器密码数据库"
+      },
+      {
+        "browser": "Firefox",
+        "patterns": {
+          "win32": "%APPDATA%\\Mozilla\\Firefox\\Profiles\\*\\logins.json",
+          "darwin": "~/Library/Application Support/Firefox/Profiles/*/logins.json",
+          "linux": "~/.mozilla/firefox/*/logins.json"
+        },
+        "action": "block",
+        "description": "Firefox 浏览器密码文件"
+      }
+    ]
+  }
 }
 EOF
     echo "      Path policy written: $POLICY_FILE"
