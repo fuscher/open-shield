@@ -2,7 +2,7 @@
 
 > **文档版本**: v3.1  
 > **最后更新**: 2026-06-20  
-> **项目状态**: Stage 1-10 已完成
+> **项目状态**: Stage 1-11 已完成
 
 ---
 
@@ -232,6 +232,25 @@
 | **跨平台路径解析** | `expandEnvVariables()`：%VAR% / ${VAR} / $VAR(仅大写) / ~ 全平台展开 |
 | **热加载修复** | `loadPathPolicy()` mtime 检测，文件变更时重新读取；`matchPattern` 移除冗余 `"i"` 标志 |
 
+### 3.8 Stage 11 — 规则编辑/添加/删除功能实现 + i18n 全面修复
+
+| 项目 | 内容 |
+|------|------|
+| **完成时间** | 2026-06-20 |
+| **实现状态** | 完整实现 |
+
+**核心变更**:
+
+| 功能 | 说明 |
+|------|------|
+| **规则 CRUD** | 编辑/添加/删除规则，支持 PII、关键词、注入、输出敏感、响应监控、自定义六种类型 |
+| **通用动态表单** | 一个模态框根据 `currentTab` 动态渲染字段，output_sensitivity 按 strategy 条件显示 |
+| **response_guard 精确编辑** | `editRule(index, group)` 传递分组参数，支持 phishing/leak_detection 分组切换 |
+| **自定义规则多文件写入** | 后端 `_source` 字段标记来源，PUT 时按源文件分组写回，导出时剥离内部字段 |
+| **还原默认** | `POST /api/rules/<type>/reset` 按当前 Tab 从 `core/rules/` 恢复默认规则 |
+| **i18n 全面修复** | 修复 11 处纯中文硬编码 + 15 处内联三元表达式，新增 50 个中英翻译 key |
+| **输入验证** | 正则表达式合法性校验 + 名称非空 + 数组非空 + XSS 转义 |
+
 ---
 
 ## 四、功能模块详解
@@ -352,6 +371,7 @@ def mask(self, content: str) -> tuple:
 | `/api/v1/policy/path` | GET | 路径策略查询 | Stage 6 |
 | `/api/v1/health` | GET | 健康检查 | Stage 2 |
 | `/api/v1/rules` | GET | 当前规则查询（含 custom_rules） | Stage 2 |
+| `/api/rules/<type>/reset` | POST | 还原默认规则（从 core/rules/ 恢复） | Stage 11 |
 | `/api/sensitive-strings` | GET/PUT | 自定义敏感字符串配置 | Stage 10 |
 | `/api/browser-passwords` | GET/PUT | 浏览器密码目录保护配置 | Stage 10 |
 | `/api/verify` | GET | 系统配置校验 + 平台信息（sys.platform） | Stage 7 |
@@ -592,6 +612,7 @@ open-shield/
 │   ├── Stage_10.md                    # Stage 10 自定义敏感字符串+浏览器密码保护方案
 │   ├── Stage_10_review.md             # Stage 10 方案审查报告
 │   └── analysis/                      # 分析与修复报告
+├── Stage_11.md                            # Stage 11 规则编辑/添加/删除功能实现方案
 ├── install.bat                        # Windows 安装脚本
 ├── install.sh                         # Linux/macOS 安装脚本
 ├── uninstall.bat                      # Windows 7 步交互式卸载脚本
@@ -779,7 +800,7 @@ chmod +x start_dashboard.sh && ./start_dashboard.sh
 | **基础设置** | 检测开关、全局阈值、通知开关 |
 | **高级设置** | 分类阈值、TS 插件参数（带 TTL 缓存热更新） |
 | **路径策略** | 黑白名单管理、浏览器密码目录保护、学习模式开关 |
-| **规则管理** | PII/关键词/注入/输出/响应监控/自定义规则编辑、自定义敏感字符串管理 |
+| **规则管理** | PII/关键词/注入/输出/响应监控/自定义规则 CRUD（编辑/添加/删除/还原默认）、自定义敏感字符串管理 |
 | **通知管理** | Webhook CRUD、测试发送 |
 | **日志查看** | 检测日志/通知日志、按日期/级别筛选、清理功能 |
 
@@ -834,6 +855,7 @@ chmod +x start_dashboard.sh && ./start_dashboard.sh
 | Stage 8 兼容性与 UI | `report/Stage_8.md` | PEP 668 兼容性与 UI 优化 |
 | Stage 9 脚本审计 | `report/Stage_9.md` | 安装/卸载脚本审计报告 |
 | Stage 10 敏感字符串 | `report/Stage_10.md` | 自定义敏感字符串+浏览器密码目录保护方案 |
+| Stage 11 规则 CRUD | `Stage_11.md` | 规则编辑/添加/删除功能实现方案 |
 | 数据持久化修复 | `report/flushSync_fix.md` | flushSync 函数 bug 修复记录 |
 | Hook 签名分析 | `report/analysis/message-updated-hook-analysis.md` | message.updated Hook 机制分析 |
 | Stage 2 回归修复 | `report/analysis/stage2-regression-fix-report.md` | 11 个问题修复详情 |
@@ -855,6 +877,7 @@ OpenShield 通过七个阶段的迭代开发，成功构建了一个完整的 AI
 6. **Stage 6** MITM 纵深防御：四层防御模型（响应防火墙 + 文件沙箱 + 输出脱敏 + 会话异常检测），覆盖中转站篡改回复、修改文件路径、数据外泄、长线渗透等攻击场景
 7. **Stage 7** Web 控制面板：可视化配置管理，支持阈值调整、规则编辑、路径策略、Webhook 管理、日志查看，深色模式 + 中英文切换
 8. **Stage 10** 自定义敏感字符串过滤 + 浏览器密码目录保护：移除高误报正则，改为精确子串匹配；预设 Chrome/Edge/Firefox 密码存储路径跨平台保护
+9. **Stage 11** 规则编辑/添加/删除功能实现：Dashboard 规则管理完整 CRUD + 还原默认 + 自定义规则多文件写入 + i18n 全面修复（50 个新翻译 key + 26 处硬编码替换）
 
 项目采用渐进式增强策略，本地规则始终可用，Python 引擎作为增强层按需调用。这种设计确保了即使在 Python 服务不可用的情况下，核心安全防护能力依然有效。
 
