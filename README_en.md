@@ -44,7 +44,7 @@ The installer automatically handles: pip dependencies → rule files → plugin 
 
 ### Configuration
 
-The installer automatically creates `~/.openshield/config.json` and `opencode.json` (bash permission config). For manual configuration, see [Permission Configuration](doc/OpenShield_doc.md#permission-configuration).
+The installer automatically creates `~/.openshield/config.json` and `opencode.json` (bash permission config). For manual configuration, see [Permission Interaction](doc/OpenShield_doc.md#35-stage-5--降低误报率与权限交互).
 
 **Key configuration files:**
 - `~/.openshield/config.json` — Main config
@@ -127,34 +127,38 @@ BLOCK  → Immediate block   (critical risk, desktop notification + log)
 ```
 User Input
   ↓
-┌────────────────────────────────────────────────┐
-│  Skill (Message Preprocessing Layer)            │
-│  LLM self-checks PII / dangerous keywords /    │
-│  malicious instructions                         │
-└──────────────────┬─────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  Skill (Message Preprocessing Layer)
+│  Markdown guides LLM to self-check PII /
+│  dangerous keywords / malicious instructions
+└──────────────────┬──────────────────────────────────────────────┘
                    ↓
-┌────────────────────────────────────────────────┐
-│  Plugin (Execution Detection + MITM Defense)    │
-│                                                 │
-│  tool.execute.before → command grading + sandbox│
-│  tool.execute.after  → output sanitization      │
-│  permission.ask      → Python engine verdict    │
-│  message.updated     → response monitoring      │
-│  session.idle        → anomaly detection        │
-└──────────────────┬─────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  Plugin (Execution Detection Layer)
+│  TypeScript plugin intercepts tool calls
+│  tool.execute.before → local grading + path sandbox
+│  tool.execute.after  → output sanitization + PII detection
+│  permission.ask      → Python engine precise verdict
+│  message.updated     → response content firewall
+│  session.idle        → session anomaly detection
+└──────────────────┬──────────────────────────────────────────────┘
                    ↓
-┌────────────────────────────────────────────────┐
-│  Python Detection Engine (localhost:9527)        │
-│  FastAPI + Bearer Token Auth                    │
-│  PII / Injection / Keywords / Output Sensitivity│
-│  Desktop Notifications + Webhook + JSONL Logs   │
-└──────────────────┬─────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  MITM Defense Layer (Stage 6)
+│  Phase A: Response monitoring (social engineering/phishing)
+│  Phase B: File operation sandbox (path blacklist/whitelist)
+│  Phase C: Tool output sanitization (real-time masking)
+│  Phase D: Session anomaly detection (behavior analysis)
+└──────────────────┬──────────────────────────────────────────────┘
                    ↓
-┌────────────────────────────────────────────────┐
-│  Dashboard (localhost:9528)                     │
-│  Flask Config Service + Web UI                  │
-│  Visual Configuration Management                │
-└────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  Python Detection Engine (localhost:9527)
+│  FastAPI single-file service + Bearer Token auth
+│  PII detection/masking + injection detection + keyword matching
+│  Output sensitive info detection + response content scanning
+│  Desktop notifications + Webhook + JSONL logs
+│  Hot rule reloading (YAML mtime monitoring)
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 **Design Principle**: The Python engine is an enhancement layer. Local rules (< 1ms) are always available. Core protection remains effective even when the Python service is unavailable.

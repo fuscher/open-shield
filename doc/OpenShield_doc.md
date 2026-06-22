@@ -47,36 +47,36 @@
 用户输入
   ↓
 ┌─────────────────────────────────────────────┐
-│  Skill (消息预处理检测层)                     │
-│  纯 Markdown 指导 LLM 自我检测 PII /         │
-│  危险关键词 / 恶意指令 → 告知用户风险          │
+│  Skill (消息预处理检测层)
+│  纯 Markdown 指导 LLM 自我检测 PII /
+│  危险关键词 / 恶意指令 → 告知用户风险
 └──────────────────┬──────────────────────────┘
                    ↓
 ┌─────────────────────────────────────────────┐
-│  Plugin (执行模式检测层)                      │
-│  TypeScript 插件，拦截工具调用                 │
-│  tool.execute.before → 本地分级 + 路径沙箱    │
-│  tool.execute.after  → 输出脱敏 + PII 检测   │
-│  permission.ask      → Python 引擎精确判定    │
-│  message.updated     → 响应内容防火墙         │
-│  session.idle        → 会话异常检测           │
+│  Plugin (执行模式检测层)
+│  TypeScript 插件，拦截工具调用
+│  tool.execute.before → 本地分级 + 路径沙箱
+│  tool.execute.after  → 输出脱敏 + PII 检测
+│  permission.ask      → Python 引擎精确判定
+│  message.updated     → 响应内容防火墙
+│  session.idle        → 会话异常检测
 └──────────────────┬──────────────────────────┘
                    ↓
 ┌─────────────────────────────────────────────┐
-│  MITM 纵深防御层 (Stage 6)                    │
-│  Phase A: 响应内容监控（社会工程/钓鱼检测）     │
-│  Phase B: 文件操作沙箱（路径黑白名单）          │
-│  Phase C: 工具输出脱敏（敏感信息实时脱敏）      │
-│  Phase D: 会话异常检测（行为模式分析）          │
+│  MITM 纵深防御层 (Stage 6)
+│  Phase A: 响应内容监控（社会工程/钓鱼检测）
+│  Phase B: 文件操作沙箱（路径黑白名单）
+│  Phase C: 工具输出脱敏（敏感信息实时脱敏）
+│  Phase D: 会话异常检测（行为模式分析）
 └──────────────────┬──────────────────────────┘
                    ↓
 ┌─────────────────────────────────────────────┐
-│  Python 检测引擎 (localhost:9527)             │
-│  FastAPI 单文件服务 + Bearer Token 认证       │
-│  PII 检测/脱敏 + 注入检测 + 关键词匹配        │
-│  输出敏感信息检测 + 响应内容扫描               │
-│  桌面通知 + Webhook + JSONL 日志              │
-│  规则热加载（YAML mtime 监控）                │
+│  Python 检测引擎 (localhost:9527)
+│  FastAPI 单文件服务 + Bearer Token 认证
+│  PII 检测/脱敏 + 注入检测 + 关键词匹配
+│  输出敏感信息检测 + 响应内容扫描
+│  桌面通知 + Webhook + JSONL 日志
+│  规则热加载（YAML mtime 监控）
 └─────────────────────────────────────────────┘
 ```
 
@@ -214,7 +214,64 @@
 - `output.output` 写回有效，Phase C 实时脱敏路径可行
 - `message.updated` 流式高频触发（3-5ms 间隔），Phase A 需 throttle 机制
 
-### 3.7 Stage 10 — 自定义敏感字符串过滤 + 浏览器密码目录保护
+### 3.7 Stage 7 — Web 控制面板
+
+| 项目 | 内容 |
+|------|------|
+| **完成时间** | 2026-06-15 |
+| **实现状态** | 完整实现 |
+
+**核心变更**:
+
+| 功能 | 说明 |
+|------|------|
+| **Web 控制面板** | 单 HTML 文件 + Flask 轻量服务（端口 9528），Bearer Token 认证，遥控器式工具（非常驻服务） |
+| **阈值配置外部化** | 改造检测引擎支持 `dashboard_config.json` 外部阈值配置，替代硬编码逻辑 |
+| **TS 插件参数外部化** | `loadTsParams()` 从 `dashboard_config.json` 动态加载参数，带 5 秒 TTL 缓存 |
+| **规则文件扩展** | `ensureRules()` 扩展支持 `output_sensitivity.yaml` 和 `response_guard.yaml` |
+| **热重载增强** | `Config._check_and_reload()` 监控 `dashboard_config.json` 和 `output_sensitivity.yaml` 变更 |
+| **可视化配置管理** | 概览、基础设置、高级设置、路径策略、规则管理、通知管理、日志查看 |
+| **文件清单** | `dashboard/server.py`（Flask 服务）、`dashboard/index.html`（单文件 Web 面板）、`start_dashboard.bat/sh`（启动脚本） |
+
+### 3.8 Stage 8 — PEP 668 兼容性修改 + UI 优化
+
+| 项目 | 内容 |
+|------|------|
+| **完成时间** | 2026-06-16 |
+| **实现状态** | 完整实现 |
+
+**核心变更**:
+
+| 功能 | 说明 |
+|------|------|
+| **虚拟环境支持** | Linux/macOS 安装脚本创建 `.venv` 虚拟环境，解决 PEP 668 外部环境保护限制 |
+| **start_dashboard.sh 改造** | 使用 venv 内 Python 启动，venv 不存在时提示运行 install.sh |
+| **.gitignore 更新** | 添加 `.venv/` 忽略虚拟环境目录 |
+| **模型一致性检测按钮** | Dashboard 概览页面添加"模型一致性检测"跳转按钮，点击后在新窗口打开 Probekit Lite 工具页面，用于分析用户调用模型是否与模型 ID 一致 |
+| **国际化支持** | 按钮支持中英文切换（`btn-model-consistency`） |
+
+### 3.9 Stage 9 — 安装/卸载脚本审计与修复
+
+| 项目 | 内容 |
+|------|------|
+| **完成时间** | 2026-06-17 |
+| **审计范围** | install.bat、install.sh、uninstall.bat、uninstall.sh |
+
+**发现的问题与修复**:
+
+| 优先级 | 问题 | 修复方案 |
+|--------|------|---------|
+| **P0** | 端口号注入漏洞 | 添加纯数字正则校验，校验失败时使用默认值 9528 |
+| **P0** | Token 弱随机数（Windows） | 改用 `[System.Security.Cryptography.RandomNumberGenerator]::GetBytes()` |
+| **P0** | service.token 文件权限 | 生成后立即 `chmod 600` |
+| **P1** | Windows 无 venv | install.bat 创建 venv，与 install.sh 保持一致 |
+| **P1** | xxd 不可移植 | 替换为 `od` 或 `hexdump` |
+| **P1** | 卸载未清理 opencode.json | 添加可选删除步骤 |
+| **P2** | 备份命名不一致 | 统一为带时间戳命名 |
+| **P2** | JSON 生成脆弱 | 改用 Python 生成 |
+| **P3** | 步骤编号不准确 | 统一为实际步数 |
+
+### 3.10 Stage 10 — 自定义敏感字符串过滤 + 浏览器密码目录保护
 
 | 项目 | 内容 |
 |------|------|
@@ -232,7 +289,7 @@
 | **跨平台路径解析** | `expandEnvVariables()`：%VAR% / ${VAR} / $VAR(仅大写) / ~ 全平台展开 |
 | **热加载修复** | `loadPathPolicy()` mtime 检测，文件变更时重新读取；`matchPattern` 移除冗余 `"i"` 标志 |
 
-### 3.8 Stage 11 — 规则编辑/添加/删除功能实现 + i18n 全面修复
+### 3.11 Stage 11 — 规则编辑/添加/删除功能实现 + i18n 全面修复
 
 | 项目 | 内容 |
 |------|------|
@@ -841,33 +898,9 @@ chmod +x start_dashboard.sh && ./start_dashboard.sh
 
 ---
 
-## 十三、相关文档索引
-
-| 文档 | 位置 | 说明 |
-|------|------|------|
-| Stage 1 完成报告 | `report/Stage_1.md` | 数据捕获插件详细设计与实现 |
-| Stage 2 设计方案 | `report/Stage_2.md` | 双重检测机制架构设计 |
-| Stage 3 开发计划 | `report/Stage_3.md` | 增强检测与脱敏功能开发 |
-| Stage 4 安全增强 | `report/Stage_4.md` | 降低误报率与用户交互优化 |
-| Stage 5 权限交互 | `report/Stage_5.md` | bash 白名单分级 + permission.ask 集成 |
-| Stage 6 MITM 防御 | `report/Stage_6.md` | 中间人攻击纵深防御方案（Phase A/B/C/D） |
-| Stage 7 Web 面板 | `report/Stage_7.md` | Web 控制面板设计方案 |
-| Stage 8 兼容性与 UI | `report/Stage_8.md` | PEP 668 兼容性与 UI 优化 |
-| Stage 9 脚本审计 | `report/Stage_9.md` | 安装/卸载脚本审计报告 |
-| Stage 10 敏感字符串 | `report/Stage_10.md` | 自定义敏感字符串+浏览器密码目录保护方案 |
-| Stage 11 规则 CRUD | `Stage_11.md` | 规则编辑/添加/删除功能实现方案 |
-| 数据持久化修复 | `report/flushSync_fix.md` | flushSync 函数 bug 修复记录 |
-| Hook 签名分析 | `report/analysis/message-updated-hook-analysis.md` | message.updated Hook 机制分析 |
-| Stage 2 回归修复 | `report/analysis/stage2-regression-fix-report.md` | 11 个问题修复详情 |
-| Stage 3 缺口分析 | `report/analysis/stage3-gap-analysis.md` | 23 项审查结果 |
-| 中转站威胁防护 | `report/analysis/relay-threat-defense-plan.md` | 威胁模型防护方案 |
-| 项目总计划 | `PLAN.md` | 项目整体规划与进展 |
-
----
-
 ## 十四、总结
 
-OpenShield 通过七个阶段的迭代开发，成功构建了一个完整的 AI Agent 安全中间件：
+OpenShield 通过十一个阶段的迭代开发，成功构建了一个完整的 AI Agent 安全中间件：
 
 1. **Stage 1** 建立了数据捕获基础，通过 7 个 Hook 机制实时捕获 LLM 输出和用户输入
 2. **Stage 2** 实现了双重检测架构，Skill 指导 LLM 进行消息预处理检测，Plugin 拦截工具调用进行执行模式检测
@@ -876,8 +909,10 @@ OpenShield 通过七个阶段的迭代开发，成功构建了一个完整的 AI
 5. **Stage 5** 优化权限交互：bash 白名单命令分级消除高频误报、`permission.ask` 集成用户确认 UI、关键词边界匹配、Service Token 认证
 6. **Stage 6** MITM 纵深防御：四层防御模型（响应防火墙 + 文件沙箱 + 输出脱敏 + 会话异常检测），覆盖中转站篡改回复、修改文件路径、数据外泄、长线渗透等攻击场景
 7. **Stage 7** Web 控制面板：可视化配置管理，支持阈值调整、规则编辑、路径策略、Webhook 管理、日志查看，深色模式 + 中英文切换
-8. **Stage 10** 自定义敏感字符串过滤 + 浏览器密码目录保护：移除高误报正则，改为精确子串匹配；预设 Chrome/Edge/Firefox 密码存储路径跨平台保护
-9. **Stage 11** 规则编辑/添加/删除功能实现：Dashboard 规则管理完整 CRUD + 还原默认 + 自定义规则多文件写入 + i18n 全面修复（50 个新翻译 key + 26 处硬编码替换）
+8. **Stage 8** PEP 668 兼容性：Linux/macOS 虚拟环境支持，解决系统 Python 环境保护限制；Dashboard 模型一致性检测按钮
+9. **Stage 9** 安装/卸载脚本审计：修复端口号注入、Token 弱随机数等安全漏洞，统一跨平台一致性，增强脚本健壮性
+10. **Stage 10** 自定义敏感字符串过滤 + 浏览器密码目录保护：移除高误报正则，改为精确子串匹配；预设 Chrome/Edge/Firefox 密码存储路径跨平台保护
+11. **Stage 11** 规则编辑/添加/删除功能实现：Dashboard 规则管理完整 CRUD + 还原默认 + 自定义规则多文件写入 + i18n 全面修复（50 个新翻译 key + 26 处硬编码替换）
 
 项目采用渐进式增强策略，本地规则始终可用，Python 引擎作为增强层按需调用。这种设计确保了即使在 Python 服务不可用的情况下，核心安全防护能力依然有效。
 
